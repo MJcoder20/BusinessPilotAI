@@ -23,6 +23,7 @@ dist/
 Thumbs.db
 
 # Test coverage
+coverage.xml
 .coverage
 .coverage.*
 htmlcov/
