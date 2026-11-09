@@ -21,3 +21,8 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Test coverage
+.coverage
+.coverage.*
+htmlcov/
