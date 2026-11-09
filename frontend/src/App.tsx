@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 import {
-  sendMessage,
+  streamMessage,
   createConversation,
   getConversations,
   getConversation,
@@ -67,6 +67,10 @@ const suggestions = [
 ];
 
 function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
   if (
     typeof error === "object" &&
     error !== null &&
@@ -267,7 +271,8 @@ function App() {
   }
 
 
-  // Send a message to BusinessPilot AI.
+
+  // Send a message to BusinessPilot AI using token streaming.
   async function handleSend(customMessage?: string) {
     const message = (customMessage ?? input).trim();
 
@@ -304,7 +309,10 @@ function App() {
     const conversationId = conversation.id;
     const isFirstMessage = conversation.messages.length === 0;
 
-    // Display the user's message immediately.
+    // The assistant placeholder follows the user's message.
+    const assistantMessageIndex = conversation.messages.length + 1;
+
+    // Display both messages immediately.
     setConversations((previous) =>
       previous.map((item) =>
         item.id === conversationId
@@ -316,12 +324,12 @@ function App() {
               messages: [
                 ...item.messages,
                 { role: "user", content: message },
+                { role: "assistant", content: "" },
               ],
             }
           : item
       )
     );
-
 
     setInput("");
     setLoading(true);
@@ -343,66 +351,94 @@ function App() {
               ? {
                   ...item,
                   serverId: created.id,
-                  title: created.title,
+                  title: message.slice(0, 35),
                 }
               : item
           )
         );
       }
 
-      // Send the message using the persistent server ID.
-      const response = await sendMessage(message, serverId);
+      // Stream the response token by token.
+      await streamMessage(
+        message,
+        serverId,
 
-      setConversations((previous) =>
-        previous.map((item) =>
-          item.id === conversationId
-            ? {
+        // Append each incoming token to the assistant message.
+        (token) => {
+          setConversations((previous) =>
+            previous.map((item) => {
+              if (item.id !== conversationId) return item;
+
+              const updatedMessages = [...item.messages];
+              const assistantMessage =
+                updatedMessages[assistantMessageIndex];
+
+              if (!assistantMessage) return item;
+
+              updatedMessages[assistantMessageIndex] = {
+                ...assistantMessage,
+                content: assistantMessage.content + token,
+              };
+
+              return {
                 ...item,
-                serverId: response.conversation_id,
-                messages: [
-                  ...item.messages,
-                  {
-                    role: "assistant",
-                    content: response.response,
-                  },
-                ],
-              }
-            : item
-        )
+                messages: updatedMessages,
+              };
+            })
+          );
+        },
+
+        // Confirm the persistent conversation ID.
+        (id) => {
+          serverId = id;
+
+          setConversations((previous) =>
+            previous.map((item) =>
+              item.id === conversationId
+                ? { ...item, serverId: id }
+                : item
+            )
+          );
+        }
       );
     } catch (error: unknown) {
       const errorMessage = getErrorMessage(
         error,
         "Something went wrong. Please try again."
-
       );
 
-      // Restore the message so the user can retry.
+      // Restore the original message so the user can retry.
       setInput(message);
 
-      // Display the error in the conversation.
+      // Show the error on the assistant placeholder.
       setConversations((previous) =>
-        previous.map((item) =>
-          item.id === conversationId
-            ? {
-                ...item,
-                messages: [
-                  ...item.messages,
-                  {
-                    role: "assistant",
-                    content: errorMessage,
-                    isError: true,
-                  },
-                ],
-              }
-            : item
-        )
+        previous.map((item) => {
+          if (item.id !== conversationId) return item;
+
+          const updatedMessages = [...item.messages];
+          const assistantMessage =
+            updatedMessages[assistantMessageIndex];
+
+          if (!assistantMessage) return item;
+
+          updatedMessages[assistantMessageIndex] = {
+            ...assistantMessage,
+            content: assistantMessage.content || errorMessage,
+            isError: true,
+          };
+
+          return {
+            ...item,
+            messages: updatedMessages,
+          };
+        })
       );
     } finally {
       sendingRef.current = false;
       setLoading(false);
     }
   }
+
 
   // Delete a conversation from PostgreSQL and the interface.
   async function deleteConversation(id: string) {
@@ -661,15 +697,7 @@ function App() {
 
               {loading && (
                 <div className="message-row assistant">
-                  <div className="message-avatar">
-                    <Bot size={19} />
-                  </div>
-
                   <div className="message-content">
-                    <span className="message-author">
-                      BusinessPilot AI
-                    </span>
-
                     <div className="typing-indicator">
                       <LoaderCircle
                         size={17}

@@ -1,14 +1,16 @@
+import json
 import logging
 from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models import Conversation, ChatMessage
 from app.schemas.ai import ChatRequest, ChatResponse
-from app.ai.agent import ask_businesspilot
+from app.ai.agent import ask_businesspilot, stream_businesspilot
 
 logger = logging.getLogger(__name__)
 
@@ -93,3 +95,96 @@ def chat(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to process chat request",
         )
+
+
+@router.post("/chat/stream")
+def chat_stream(
+    request: ChatRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Stream BusinessPilot AI responses using Server-Sent Events (SSE).
+    """
+
+    # Find or create conversation
+    conversation = None
+
+    if request.conversation_id:
+        conversation = (
+            db.query(Conversation)
+            .filter(Conversation.id == request.conversation_id)
+            .first()
+        )
+
+        if not conversation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found.",
+            )
+
+    else:
+        conversation = Conversation()
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
+
+    conversation_id = str(conversation.id)
+
+    # Save user message
+    user_message = ChatMessage(
+        conversation_id=conversation.id,
+        role="user",
+        content=request.message,
+    )
+
+    db.add(user_message)
+    db.commit()
+
+    def generate():
+        full_response = ""
+
+        try:
+            # Send conversation ID to frontend
+            yield f"data: {json.dumps({'conversation_id': conversation_id})}\n\n"
+
+            # Stream AI response
+            for chunk in stream_businesspilot(
+                request.message,
+                conversation_id,
+            ):
+                full_response += chunk
+
+                yield f"data: {json.dumps({'token': chunk})}\n\n"
+
+            # Save complete assistant response
+            if full_response:
+                assistant_message = ChatMessage(
+                    conversation_id=conversation.id,
+                    role="assistant",
+                    content=full_response,
+                )
+
+                db.add(assistant_message)
+                db.commit()
+
+            # Signal completion
+            yield f"data: {json.dumps({'done': True})}\n\n"
+
+        except Exception:
+            db.rollback()
+            logging.exception("Streaming AI response failed.")
+
+            yield f"data: {json.dumps({'error': 'An error occurred while generating the AI response.'})}\n\n"
+
+        finally:
+            db.close()
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
