@@ -106,48 +106,67 @@ def chat_stream(
     Stream BusinessPilot AI responses using Server-Sent Events (SSE).
     """
 
-    # Find or create conversation
-    conversation = None
+    # 1. Find or create conversation and save user message.
+    try:
+        conversation = None
 
-    if request.conversation_id:
-        conversation = (
-            db.query(Conversation)
-            .filter(Conversation.id == request.conversation_id)
-            .first()
-        )
-
-        if not conversation:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Conversation not found.",
+        if request.conversation_id:
+            conversation = (
+                db.query(Conversation)
+                .filter(Conversation.id == request.conversation_id)
+                .first()
             )
 
-    else:
-        conversation = Conversation()
-        db.add(conversation)
+            if not conversation:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Conversation not found.",
+                )
+
+        else:
+            conversation = Conversation()
+            db.add(conversation)
+            db.commit()
+            db.refresh(conversation)
+
+        conversation_id = str(conversation.id)
+
+        user_message = ChatMessage(
+            conversation_id=conversation.id,
+            role="user",
+            content=request.message,
+        )
+
+        db.add(user_message)
+        conversation.updated_at = datetime.now(timezone.utc)
         db.commit()
-        db.refresh(conversation)
 
-    conversation_id = str(conversation.id)
+    except HTTPException:
+        db.rollback()
+        db.close()
+        raise
 
-    # Save user message
-    user_message = ChatMessage(
-        conversation_id=conversation.id,
-        role="user",
-        content=request.message,
-    )
+    except Exception:
+        db.rollback()
+        logger.exception(
+            "Failed to prepare AI streaming request."
+        )
+        db.close()
 
-    db.add(user_message)
-    db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to prepare chat request.",
+        )
 
+    # 2. Generate the streaming response.
     def generate():
         full_response = ""
 
         try:
-            # Send conversation ID to frontend
+            # Send conversation ID to frontend.
             yield f"data: {json.dumps({'conversation_id': conversation_id})}\n\n"
 
-            # Stream AI response
+            # Stream AI response.
             for chunk in stream_businesspilot(
                 request.message,
                 conversation_id,
@@ -156,7 +175,7 @@ def chat_stream(
 
                 yield f"data: {json.dumps({'token': chunk})}\n\n"
 
-            # Save complete assistant response
+            # Save complete assistant response.
             if full_response:
                 assistant_message = ChatMessage(
                     conversation_id=conversation.id,
@@ -165,14 +184,18 @@ def chat_stream(
                 )
 
                 db.add(assistant_message)
+                conversation.updated_at = datetime.now(timezone.utc)
                 db.commit()
 
-            # Signal completion
+            # Signal completion.
             yield f"data: {json.dumps({'done': True})}\n\n"
 
         except Exception:
             db.rollback()
-            logging.exception("Streaming AI response failed.")
+
+            logger.exception(
+                "Streaming AI response failed."
+            )
 
             yield f"data: {json.dumps({'error': 'An error occurred while generating the AI response.'})}\n\n"
 
