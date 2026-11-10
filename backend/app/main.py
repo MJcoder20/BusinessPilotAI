@@ -1,30 +1,41 @@
+
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
 from app.api import products
 from app.api import customers
 from app.api import sales_orders
-from app.api.invoices import router as invoices_router
-from app.api.analytics import router as analytics_router
-from fastapi.middleware.cors import CORSMiddleware
 from app.api import ai
 from app.api import conversations
+from app.api.invoices import router as invoices_router
+from app.api.analytics import router as analytics_router
+
 from app.ai.agent import (
     initialize_agent_storage,
     close_agent_storage,
 )
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize PostgreSQL checkpoint storage.
+    initialize_agent_storage()
+
+    yield
+
+    # Close PostgreSQL connection pool.
+    close_agent_storage()
+
+
 app = FastAPI(
     title="BusinessPilot AI",
     description="Enterprise AI Business Assistant API",
-    version="0.1.0"
+    version="0.1.0",
+    lifespan=lifespan,
 )
-@app.on_event("startup")
-def startup_event():
-    initialize_agent_storage()
 
-
-@app.on_event("shutdown")
-def shutdown_event():
-    close_agent_storage()
 
 @app.get("/")
 def root():
@@ -40,25 +51,14 @@ def health_check():
     }
 
 
-app.include_router(
-    customers.router,
-    prefix="/api/v1"
-)
-app.include_router(
-    products.router,
-    prefix="/api/v1"
-)
-app.include_router(
-    sales_orders.router,
-    prefix="/api/v1"
-)
+app.include_router(customers.router, prefix="/api/v1")
+app.include_router(products.router, prefix="/api/v1")
+app.include_router(sales_orders.router, prefix="/api/v1")
 app.include_router(invoices_router, prefix="/api/v1")
 app.include_router(analytics_router, prefix="/api/v1")
 app.include_router(ai.router, prefix="/api/v1")
-app.include_router(
-    conversations.router,
-    prefix="/api/v1",
-)
+app.include_router(conversations.router, prefix="/api/v1")
+
 
 app.add_middleware(
     CORSMiddleware,
