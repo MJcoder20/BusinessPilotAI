@@ -82,8 +82,8 @@ database_url = make_url(
 # Create a connection pool that opens during application startup.
 connection_pool = ConnectionPool(
     conninfo=database_url,
-    min_size=1,
-    max_size=10,
+    min_size=settings.checkpoint_pool_min_size,
+    max_size=settings.checkpoint_pool_max_size,
     kwargs={
         "autocommit": True,
         "prepare_threshold": 0,

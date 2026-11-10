@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     db_max_overflow: int = 10
     db_pool_timeout: int = 30
 
+    # LangGraph checkpoint connection pool.
+    checkpoint_pool_min_size: int = 1
+    checkpoint_pool_max_size: int = 2
+
     # AI model configuration.
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:3b"
