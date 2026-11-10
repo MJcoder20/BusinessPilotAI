@@ -47,7 +47,7 @@ Tool error handling:
 
 
 model = ChatOllama(
-    model="qwen2.5:3b",
+    model=settings.ollama_model,
     temperature=0,
     base_url=settings.ollama_base_url,
 )
