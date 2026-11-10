@@ -7,6 +7,7 @@ from langgraph.checkpoint.postgres import PostgresSaver
 from app.core.config import settings
 import logging
 
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """
 You are BusinessPilot AI, an intelligent business assistant.
@@ -90,13 +91,13 @@ def initialize_agent_storage():
     """Open the connection pool and initialize checkpoint tables."""
     connection_pool.open(wait=True)
     checkpointer.setup()
-    print("LangGraph PostgreSQL checkpoint storage initialized.")
+    logger.info("LangGraph PostgreSQL checkpoint storage initialized.")
 
 
 def close_agent_storage():
     """Close the PostgreSQL connection pool."""
     connection_pool.close()
-    print("LangGraph PostgreSQL connection pool closed.")
+    logger.info("LangGraph PostgreSQL connection pool closed.")
 
 
 def ask_businesspilot(

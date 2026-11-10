@@ -16,7 +16,12 @@ from app.ai.agent import (
     initialize_agent_storage,
     close_agent_storage,
 )
+import logging
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
