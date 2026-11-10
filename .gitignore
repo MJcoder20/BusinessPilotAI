@@ -31,3 +31,5 @@ htmlcov/
 # Local database backups
 *.dump
 *.backup
+
+/secrets/

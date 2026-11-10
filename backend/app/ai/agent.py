@@ -55,7 +55,7 @@ model = ChatOllama(
 
 # Convert SQLAlchemy's PostgreSQL URL into a psycopg-compatible URL.
 database_url = make_url(
-    settings.database_url
+    settings.resolved_database_url
 ).set(
     drivername="postgresql"
 ).render_as_string(hide_password=False)

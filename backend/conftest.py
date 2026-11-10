@@ -22,7 +22,7 @@ from app.models import (
 
 
 TEST_DATABASE_URL = make_url(
-    settings.database_url
+    settings.resolved_database_url
 ).set(
     database="businesspilot_test_db"
 ).render_as_string(hide_password=False)
