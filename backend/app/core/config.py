@@ -1,4 +1,3 @@
-
 from pathlib import Path
 from typing import Literal
 
@@ -28,6 +27,13 @@ class Settings(BaseSettings):
     # AI model configuration.
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:3b"
+
+    # AI model provider configuration.
+    chat_model_provider: Literal["ollama", "gemini"] = "ollama"
+
+    # Google Gemini configuration.
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-3.5-flash-lite"
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -44,6 +44,35 @@ def test_chat_creates_conversation_and_saves_messages(client, db_session):
     assert messages[1].content == "Your business has 5 customers."
 
 
+def test_chat_saves_normalized_gemini_response(client, db_session):
+    normalized_response = "You have 5 customers."
+
+    with patch(
+        "app.api.ai.ask_businesspilot",
+        return_value=normalized_response,
+    ):
+        response = client.post(
+            "/api/v1/ai/chat",
+            json={"message": "How many customers do we have?"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["response"] == normalized_response
+
+    conversation_id = response.json()["conversation_id"]
+
+    assistant_message = (
+        db_session.query(ChatMessage)
+        .filter(
+            ChatMessage.conversation_id == conversation_id,
+            ChatMessage.role == "assistant",
+        )
+        .first()
+    )
+
+    assert assistant_message is not None
+    assert assistant_message.content == normalized_response
+
 def test_chat_reuses_existing_conversation(client, db_session):
     conversation = Conversation(
         id="existing-chat-001",

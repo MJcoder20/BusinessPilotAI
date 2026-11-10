@@ -20,6 +20,7 @@ jsonpatch==1.44
 jsonpointer==3.10
 langchain==1.4.9
 langchain-core==1.7.6
+langchain-google-genai==4.4.0
 langchain-ollama==1.1.0
 langchain-protocol==0.0.21
 langgraph==1.2.20
