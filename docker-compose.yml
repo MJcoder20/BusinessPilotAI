@@ -7,6 +7,8 @@ services:
     image: postgres:18
     container_name: businesspilot-db
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -27,6 +29,11 @@ services:
     image: businesspilot-backend:latest
     container_name: businesspilot-backend
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       OLLAMA_BASE_URL: http://host.docker.internal:11434
@@ -59,8 +66,13 @@ services:
     image: businesspilot-frontend:latest
     container_name: businesspilot-frontend
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:8080"
     depends_on:
       backend:
         condition: service_healthy
