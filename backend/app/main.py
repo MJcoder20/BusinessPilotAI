@@ -17,6 +17,10 @@ from app.ai.agent import (
     close_agent_storage,
 )
 import logging
+from sqlalchemy import text
+from app.core.database import engine
+from fastapi import FastAPI, HTTPException
+from app.core.config import settings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -55,6 +59,56 @@ def health_check():
         "status": "healthy"
     }
 
+@app.get("/api/v1/health/ready")
+def readiness_check():
+    database_status = "connected"
+    ollama_status = "available"
+
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception:
+        database_status = "disconnected"
+
+    try:
+        import urllib.request
+
+        url = f"{settings.ollama_base_url.rstrip('/')}/api/tags"
+
+        with urllib.request.urlopen(url, timeout=5) as response:
+            if response.status != 200:
+                ollama_status = "unavailable"
+            else:
+                import json
+
+                ollama_data = json.loads(response.read().decode())
+
+                available_models = [
+                    model["name"]
+                    for model in ollama_data.get("models", [])
+                ]
+
+                if settings.ollama_model not in available_models:
+                    ollama_status = "model_not_found"
+
+    except Exception:
+        ollama_status = "unavailable"
+
+    if database_status != "connected" or ollama_status != "available":
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "not_ready",
+                "database": database_status,
+                "ollama": ollama_status,
+            },
+        )
+
+    return {
+        "status": "ready",
+        "database": database_status,
+        "ollama": ollama_status,
+    }
 
 app.include_router(customers.router, prefix="/api/v1")
 app.include_router(products.router, prefix="/api/v1")
