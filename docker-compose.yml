@@ -1,0 +1,71 @@
+
+name: businesspilot
+
+services:
+  # PostgreSQL database
+  db:
+    image: postgres:18
+    container_name: businesspilot-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # FastAPI backend
+  backend:
+    image: businesspilot-backend:latest
+    container_name: businesspilot-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - |
+        alembic upgrade head &&
+        uvicorn app.main:app --host 0.0.0.0 --port 8000
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # React frontend served by Nginx
+  frontend:
+    image: businesspilot-frontend:latest
+    container_name: businesspilot-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+# Persistent PostgreSQL storage
+volumes:
+  postgres_data:
+    name: businesspilot_postgres_data

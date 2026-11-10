@@ -49,6 +49,7 @@ Tool error handling:
 model = ChatOllama(
     model="qwen2.5:3b",
     temperature=0,
+    base_url=settings.ollama_base_url,
 )
 
 # Convert SQLAlchemy's PostgreSQL URL into a psycopg-compatible URL.

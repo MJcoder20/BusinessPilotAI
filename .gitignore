@@ -27,3 +27,7 @@ coverage.xml
 .coverage
 .coverage.*
 htmlcov/
+
+# Local database backups
+*.dump
+*.backup
