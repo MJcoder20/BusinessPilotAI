@@ -35,7 +35,12 @@ services:
     cap_drop:
       - ALL
     environment:
+      APP_ENV: production
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:8080}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DB_POOL_SIZE: ${DB_POOL_SIZE:-5}
+      DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-10}
+      DB_POOL_TIMEOUT: ${DB_POOL_TIMEOUT:-30}
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
     extra_hosts:

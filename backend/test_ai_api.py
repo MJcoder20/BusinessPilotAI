@@ -1,8 +1,11 @@
-
+import asyncio
 import json
 from unittest.mock import patch
 
+from starlette.requests import Request
+
 from app.models import Conversation, ChatMessage
+from app.main import unexpected_exception_handler
 
 
 def test_chat_creates_conversation_and_saves_messages(client, db_session):
@@ -276,3 +279,40 @@ def test_chat_stream_emits_error_when_generation_fails(
     )
 
     assert assistant_messages == []
+
+
+def test_unexpected_exception_returns_safe_response():
+    request = Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "GET",
+            "scheme": "http",
+            "path": "/test",
+            "raw_path": b"/test",
+            "query_string": b"",
+            "headers": [],
+            "server": ("testserver", 80),
+            "client": ("testclient", 50000),
+            "root_path": "",
+        }
+    )
+
+    internal_error = "Database password: secret123"
+
+    try:
+        raise RuntimeError(internal_error)
+    except RuntimeError as exc:
+        response = asyncio.run(
+            unexpected_exception_handler(request, exc)
+        )
+
+    assert response.status_code == 500
+
+    response_data = json.loads(response.body)
+
+    assert response_data["detail"] == (
+        "An unexpected internal error occurred. Please try again later."
+    )
+
+    assert internal_error not in response.body.decode()

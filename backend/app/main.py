@@ -1,8 +1,8 @@
 
 from contextlib import asynccontextmanager
-
-from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from app.api import products
 from app.api import customers
@@ -19,7 +19,6 @@ from app.ai.agent import (
 import logging
 from sqlalchemy import text
 from app.core.database import engine
-from fastapi import FastAPI, HTTPException
 from app.core.config import settings
 
 logging.basicConfig(
@@ -43,8 +42,32 @@ app = FastAPI(
     description="Enterprise AI Business Assistant API",
     version="0.1.0",
     lifespan=lifespan,
+    docs_url="/docs" if settings.app_env == "development" else None,
+    redoc_url="/redoc" if settings.app_env == "development" else None,
+    openapi_url="/openapi.json" if settings.app_env == "development" else None,
 )
 
+
+logger = logging.getLogger(__name__)
+
+
+@app.exception_handler(Exception)
+async def unexpected_exception_handler(
+    request: Request,
+    exc: Exception,
+):
+    logger.exception(
+        "Unhandled exception: %s %s",
+        request.method,
+        request.url.path,
+    )
+
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "An unexpected internal error occurred. Please try again later."
+        },
+    )
 
 @app.get("/")
 def root():
@@ -121,12 +144,16 @@ app.include_router(conversations.router, prefix="/api/v1")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-    ],
+    allow_origins=(
+        [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:5174",
+            "http://127.0.0.1:5174",
+        ]
+        if settings.app_env == "development"
+        else [settings.frontend_origin]
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
