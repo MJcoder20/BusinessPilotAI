@@ -408,7 +408,7 @@ button:disabled {
 .message-row {
   display: flex;
   gap: 15px;
-  margin-bottom: 30px;
+  margin-bottom: 20px;
 }
 
 .message-avatar {
@@ -445,12 +445,38 @@ button:disabled {
   margin: 4px 0 10px;
 }
 
+
 .message-text {
   font-size: 14px;
   color: #475569;
-  line-height: 1.85;
-  white-space: pre-wrap;
+  line-height: 1.6;
+  white-space: normal;
   overflow-wrap: anywhere;
+}
+
+.message-text p {
+  margin: 0 0 8px;
+}
+
+.message-text p:last-child {
+  margin-bottom: 0;
+}
+
+.message-text ul,
+.message-text ol {
+  margin: 6px 0;
+  padding-left: 22px;
+}
+
+.message-text li {
+  margin-bottom: 3px;
+}
+
+.message-text h1,
+.message-text h2,
+.message-text h3 {
+  margin: 12px 0 6px;
+  line-height: 1.4;
 }
 
 .typing-indicator {
