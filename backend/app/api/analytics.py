@@ -7,18 +7,23 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.dependencies import get_current_user
 from app.models import (
     Customer,
     Product,
     SalesOrder,
     Invoice,
+    User,
 )
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
 
 @router.get("/dashboard")
-def dashboard(db: Session = Depends(get_db)):
+def dashboard(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     total_customers = db.query(func.count(Customer.id)).scalar() or 0
     total_products = db.query(func.count(Product.id)).scalar() or 0
     total_orders = db.query(func.count(SalesOrder.id)).scalar() or 0
@@ -65,7 +70,10 @@ def dashboard(db: Session = Depends(get_db)):
 
 
 @router.get("/revenue")
-def revenue(db: Session = Depends(get_db)):
+def revenue(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     results = (
         db.query(
             func.date(SalesOrder.created_at).label("date"),
@@ -89,7 +97,8 @@ def revenue(db: Session = Depends(get_db)):
 @router.get("/top-customers")
 def top_customers(
     limit: int = 5,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     results = (
         db.query(
@@ -120,7 +129,8 @@ def top_customers(
 @router.get("/low-stock")
 def low_stock(
     threshold: int = 10,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     products = (
         db.query(Product)
@@ -141,7 +151,10 @@ def low_stock(
 
 
 @router.get("/overdue-invoices")
-def overdue_invoices(db: Session = Depends(get_db)):
+def overdue_invoices(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     invoices = (
         db.query(Invoice)
         .filter(

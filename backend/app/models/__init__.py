@@ -6,6 +6,8 @@ from app.models.invoice import Invoice
 from app.models.opportunity import Opportunity
 from app.models.conversation import Conversation
 from app.models.chat_message import ChatMessage
+from app.models.user import User
+from app.models.refresh_token import RefreshToken
 
 __all__ = [
     "Customer",
@@ -16,4 +18,6 @@ __all__ = [
     "Opportunity",
     "Conversation",
     "ChatMessage",
+    "User",
+    "RefreshToken",
 ]

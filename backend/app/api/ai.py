@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.rate_limiter import limiter
 from app.core.database import get_db
-from app.models import Conversation, ChatMessage
+from app.core.dependencies import get_current_user
+from app.models import Conversation, ChatMessage, User
 from app.schemas.ai import ChatRequest, ChatResponse
 from app.ai.agent import ask_businesspilot, stream_businesspilot
 
@@ -29,27 +30,32 @@ def chat(
     response: Response,
     chat_request: ChatRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     conversation_id = chat_request.conversation_id or str(uuid4())
 
     try:
         # 1. Find or create the conversation.
-        conversation = (
-            db.query(Conversation)
-            .filter(Conversation.id == conversation_id)
-            .first()
-        )
-
-        if conversation_id and chat_request.conversation_id and not conversation:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Conversation not found",
+        if chat_request.conversation_id:
+            conversation = (
+                db.query(Conversation)
+                .filter(
+                    Conversation.id == conversation_id,
+                    Conversation.owner_id == current_user.id,
+                )
+                .first()
             )
 
-        if not conversation:
+            if not conversation:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Conversation not found",
+                )
+        else:
             conversation = Conversation(
                 id=conversation_id,
                 title=chat_request.message.strip()[:200],
+                owner_id=current_user.id,
             )
             db.add(conversation)
             db.commit()
@@ -69,6 +75,7 @@ def chat(
         # 3. Ask the LangGraph agent.
         ai_response = ask_businesspilot(
             question=chat_request.message,
+            user_id=current_user.id,
             conversation_id=conversation_id,
         )
 
@@ -109,6 +116,7 @@ def chat_stream(
     response: Response,
     chat_request: ChatRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Stream BusinessPilot AI responses using Server-Sent Events (SSE).
@@ -116,12 +124,13 @@ def chat_stream(
 
     # 1. Find or create conversation and save user message.
     try:
-        conversation = None
-
         if chat_request.conversation_id:
             conversation = (
                 db.query(Conversation)
-                .filter(Conversation.id == chat_request.conversation_id)
+                .filter(
+                    Conversation.id == chat_request.conversation_id,
+                    Conversation.owner_id == current_user.id,
+                )
                 .first()
             )
 
@@ -130,9 +139,10 @@ def chat_stream(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Conversation not found.",
                 )
-
         else:
-            conversation = Conversation()
+            conversation = Conversation(
+                owner_id=current_user.id,
+            )
             db.add(conversation)
             db.commit()
             db.refresh(conversation)
@@ -156,9 +166,7 @@ def chat_stream(
 
     except Exception:
         db.rollback()
-        logger.exception(
-            "Failed to prepare AI streaming request."
-        )
+        logger.exception("Failed to prepare AI streaming request.")
         db.close()
 
         raise HTTPException(
@@ -177,6 +185,7 @@ def chat_stream(
             # Stream AI response.
             for chunk in stream_businesspilot(
                 chat_request.message,
+                current_user.id,
                 conversation_id,
             ):
                 full_response += chunk

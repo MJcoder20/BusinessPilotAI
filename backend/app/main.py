@@ -7,6 +7,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.core.rate_limiter import limiter
+from app.api import auth
 from app.api import products
 from app.api import customers
 from app.api import sales_orders
@@ -148,7 +149,7 @@ app.include_router(invoices_router, prefix="/api/v1")
 app.include_router(analytics_router, prefix="/api/v1")
 app.include_router(ai.router, prefix="/api/v1")
 app.include_router(conversations.router, prefix="/api/v1")
-
+app.include_router(auth.router, prefix="/api/v1")
 
 app.add_middleware(
     CORSMiddleware,

@@ -1,31 +1,34 @@
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
-from app.models import Conversation
+from app.core.dependencies import get_current_user
+from app.models import Conversation, User
 from app.schemas.conversation import (
     ConversationCreate,
     ConversationResponse,
     ConversationDetailResponse,
 )
 
-router = APIRouter(
-    prefix="/conversations",
-    tags=["Conversations"],
-)
+
+router = APIRouter(prefix="/conversations", tags=["Conversations"])
 
 
 @router.post(
     "",
     response_model=ConversationResponse,
-    status_code=status.HTTP_201_CREATED,
+    status_code=201,
 )
 def create_conversation(
     request: ConversationCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    conversation = Conversation(title=request.title)
+    conversation = Conversation(
+        title=request.title,
+        owner_id=current_user.id,
+    )
 
     db.add(conversation)
     db.commit()
@@ -34,15 +37,14 @@ def create_conversation(
     return conversation
 
 
-@router.get(
-    "",
-    response_model=list[ConversationResponse],
-)
+@router.get("", response_model=list[ConversationResponse])
 def get_conversations(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     return (
         db.query(Conversation)
+        .filter(Conversation.owner_id == current_user.id)
         .order_by(Conversation.updated_at.desc())
         .all()
     )
@@ -55,44 +57,49 @@ def get_conversations(
 def get_conversation(
     conversation_id: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     conversation = (
         db.query(Conversation)
         .options(selectinload(Conversation.messages))
-        .filter(Conversation.id == conversation_id)
+        .filter(
+            Conversation.id == conversation_id,
+            Conversation.owner_id == current_user.id,
+        )
         .first()
     )
 
     if not conversation:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=404,
             detail="Conversation not found",
         )
 
     return conversation
 
 
-@router.delete(
-    "/{conversation_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
+@router.delete("/{conversation_id}", status_code=204)
 def delete_conversation(
     conversation_id: str,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     conversation = (
         db.query(Conversation)
-        .filter(Conversation.id == conversation_id)
+        .filter(
+            Conversation.id == conversation_id,
+            Conversation.owner_id == current_user.id,
+        )
         .first()
     )
 
     if not conversation:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=404,
             detail="Conversation not found",
         )
 
     db.delete(conversation)
     db.commit()
 
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return Response(status_code=204)

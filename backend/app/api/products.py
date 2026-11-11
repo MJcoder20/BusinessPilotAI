@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models import Product, OrderItem
+from app.models import Product, OrderItem, User
+from app.core.dependencies import get_current_user, require_roles
 from app.schemas.product import ProductCreate, ProductResponse
 
 router = APIRouter(prefix="/products", tags=["Products"])
@@ -15,7 +16,8 @@ router = APIRouter(prefix="/products", tags=["Products"])
 )
 def create_product(
     product_data: ProductCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "manager")),
 ):
     existing = db.query(Product).filter(
         Product.sku == product_data.sku
@@ -37,14 +39,18 @@ def create_product(
 
 
 @router.get("/", response_model=list[ProductResponse])
-def get_products(db: Session = Depends(get_db)):
+def get_products(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     return db.query(Product).order_by(Product.id.desc()).all()
 
 
 @router.get("/{product_id}", response_model=ProductResponse)
 def get_product(
     product_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     product = db.query(Product).filter(
         Product.id == product_id
@@ -60,7 +66,8 @@ def get_product(
 def update_product(
     product_id: int,
     product_data: ProductCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "manager")),
 ):
     product = db.query(Product).filter(
         Product.id == product_id
@@ -89,7 +96,8 @@ def update_product(
 @router.delete("/{product_id}", status_code=204)
 def delete_product(
     product_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin")),
 ):
     product = db.query(Product).filter(
         Product.id == product_id

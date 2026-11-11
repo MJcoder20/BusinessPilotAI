@@ -1,14 +1,58 @@
 import asyncio
 import json
+import pytest
 from unittest.mock import patch
 
 from starlette.requests import Request
 
-from app.models import Conversation, ChatMessage
+from app.models import Conversation, ChatMessage, User
 from app.main import unexpected_exception_handler
 
 
+def get_ai_auth_headers(
+    client,
+    db_session,
+    email="ai-test@example.com",
+):
+    password = "SecurePassword123!"
+
+    register_response = client.post(
+        "/api/v1/auth/register",
+        json={
+            "full_name": "AI Test User",
+            "email": email,
+            "password": password,
+        },
+    )
+
+    assert register_response.status_code == 201
+
+    user = (
+        db_session.query(User)
+        .filter(User.email == email)
+        .first()
+    )
+
+    assert user is not None
+
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": email,
+            "password": password,
+        },
+    )
+
+    assert login_response.status_code == 200
+
+    return {
+        "Authorization": (
+            f"Bearer {login_response.json()['access_token']}"
+        )
+    }
+
 def test_chat_creates_conversation_and_saves_messages(client, db_session):
+    headers = get_ai_auth_headers(client, db_session)
     with patch(
         "app.api.ai.ask_businesspilot",
         return_value="Your business has 5 customers.",
@@ -16,6 +60,7 @@ def test_chat_creates_conversation_and_saves_messages(client, db_session):
         response = client.post(
             "/api/v1/ai/chat",
             json={"message": "How many customers do we have?"},
+            headers=headers,
         )
 
     assert response.status_code == 200
@@ -27,6 +72,7 @@ def test_chat_creates_conversation_and_saves_messages(client, db_session):
 
     mock_agent.assert_called_once_with(
         question="How many customers do we have?",
+        user_id=1,
         conversation_id=data["conversation_id"],
     )
 
@@ -45,6 +91,7 @@ def test_chat_creates_conversation_and_saves_messages(client, db_session):
 
 
 def test_chat_saves_normalized_gemini_response(client, db_session):
+    headers = get_ai_auth_headers(client, db_session)
     normalized_response = "You have 5 customers."
 
     with patch(
@@ -54,6 +101,7 @@ def test_chat_saves_normalized_gemini_response(client, db_session):
         response = client.post(
             "/api/v1/ai/chat",
             json={"message": "How many customers do we have?"},
+            headers=headers,
         )
 
     assert response.status_code == 200
@@ -74,9 +122,15 @@ def test_chat_saves_normalized_gemini_response(client, db_session):
     assert assistant_message.content == normalized_response
 
 def test_chat_reuses_existing_conversation(client, db_session):
+    headers = get_ai_auth_headers(client, db_session)
+    user = db_session.query(User).filter(
+        User.email == "ai-test@example.com"
+    ).first()
+
     conversation = Conversation(
         id="existing-chat-001",
         title="Previous conversation",
+        owner_id=user.id,
     )
 
     db_session.add(conversation)
@@ -88,6 +142,7 @@ def test_chat_reuses_existing_conversation(client, db_session):
     ) as mock_agent:
         response = client.post(
             "/api/v1/ai/chat",
+            headers=headers,
             json={
                 "message": "What is our revenue?",
                 "conversation_id": "existing-chat-001",
@@ -99,6 +154,7 @@ def test_chat_reuses_existing_conversation(client, db_session):
 
     mock_agent.assert_called_once_with(
         question="What is our revenue?",
+        user_id=user.id,
         conversation_id="existing-chat-001",
     )
 
@@ -113,9 +169,11 @@ def test_chat_reuses_existing_conversation(client, db_session):
     assert len(messages) == 2
 
 
-def test_chat_returns_404_for_unknown_conversation(client):
+def test_chat_returns_404_for_unknown_conversation(client, db_session):
+    headers = get_ai_auth_headers(client, db_session)
     response = client.post(
         "/api/v1/ai/chat",
+        headers=headers,
         json={
             "message": "Hello",
             "conversation_id": "unknown-chat-001",
@@ -127,12 +185,14 @@ def test_chat_returns_404_for_unknown_conversation(client):
 
 
 def test_chat_returns_500_when_agent_fails(client, db_session):
+    headers = get_ai_auth_headers(client, db_session)
     with patch(
         "app.api.ai.ask_businesspilot",
         side_effect=RuntimeError("Internal model failure"),
     ):
         response = client.post(
             "/api/v1/ai/chat",
+            headers=headers,
             json={"message": "Show dashboard"},
         )
 
@@ -140,18 +200,22 @@ def test_chat_returns_500_when_agent_fails(client, db_session):
     assert response.json()["detail"] == "Failed to process chat request"
 
 
-def test_chat_rejects_empty_message(client):
+def test_chat_rejects_empty_message(client, db_session):
+    headers = get_ai_auth_headers(client, db_session)
     response = client.post(
         "/api/v1/ai/chat",
+        headers=headers,
         json={"message": ""},
     )
 
     assert response.status_code == 422
 
 
-def test_chat_rejects_message_over_4000_characters(client):
+def test_chat_rejects_message_over_4000_characters(client, db_session):
+    headers = get_ai_auth_headers(client, db_session)
     response = client.post(
         "/api/v1/ai/chat",
+        headers=headers,
         json={"message": "A" * 4001},
     )
 
@@ -162,12 +226,20 @@ def test_chat_stream_returns_tokens_and_persists_response(
     client,
     db_session,
 ):
+    headers = get_ai_auth_headers(client, db_session)
+    user = db_session.query(User).filter(
+        User.email == "ai-test@example.com"
+    ).first()
+
+    assert user is not None
+    user_id = user.id
     with patch(
         "app.api.ai.stream_businesspilot",
         return_value=iter(["Your ", "revenue ", "is $5000."]),
     ) as mock_stream:
         response = client.post(
             "/api/v1/ai/chat/stream",
+            headers=headers,
             json={"message": "Show revenue"},
         )
 
@@ -194,6 +266,7 @@ def test_chat_stream_returns_tokens_and_persists_response(
 
     mock_stream.assert_called_once_with(
         "Show revenue",
+        user_id,
         conversation_id,
     )
 
@@ -215,9 +288,14 @@ def test_chat_stream_reuses_existing_conversation(
     client,
     db_session,
 ):
+    headers = get_ai_auth_headers(client, db_session)
+    user = db_session.query(User).filter(
+        User.email == "ai-test@example.com"
+    ).first()
     conversation = Conversation(
         id="stream-chat-001",
         title="Existing stream conversation",
+        owner_id=user.id,
     )
 
     db_session.add(conversation)
@@ -229,6 +307,7 @@ def test_chat_stream_reuses_existing_conversation(
     ):
         response = client.post(
             "/api/v1/ai/chat/stream",
+            headers=headers,
             json={
                 "message": "Continue",
                 "conversation_id": "stream-chat-001",
@@ -247,9 +326,11 @@ def test_chat_stream_reuses_existing_conversation(
     assert {"done": True} in events
 
 
-def test_chat_stream_returns_404_for_unknown_conversation(client):
+def test_chat_stream_returns_404_for_unknown_conversation(client, db_session):
+    headers = get_ai_auth_headers(client, db_session)
     response = client.post(
         "/api/v1/ai/chat/stream",
+        headers=headers,
         json={
             "message": "Continue",
             "conversation_id": "unknown-stream-chat",
@@ -264,6 +345,7 @@ def test_chat_stream_emits_error_when_generation_fails(
     client,
     db_session,
 ):
+    headers = get_ai_auth_headers(client, db_session)
     def failing_stream(*args):
         yield "Partial "
         raise RuntimeError("Internal model failure")
@@ -274,6 +356,7 @@ def test_chat_stream_emits_error_when_generation_fails(
     ):
         response = client.post(
             "/api/v1/ai/chat/stream",
+            headers=headers,
             json={"message": "Generate a report"},
         )
 
@@ -347,15 +430,18 @@ def test_unexpected_exception_returns_safe_response():
     assert internal_error not in response.body.decode()
 
 
-def test_chat_rate_limit_returns_429(client):
+def test_chat_rate_limit_returns_429(client, db_session):
+    headers = get_ai_auth_headers(client, db_session)
+
     with patch(
         "app.api.ai.ask_businesspilot",
         return_value="Test response",
-    ):
+    ) as mock_agent:
         responses = [
             client.post(
                 "/api/v1/ai/chat",
                 json={"message": "Test rate limiting"},
+                headers=headers,
             )
             for _ in range(11)
         ]
@@ -365,17 +451,20 @@ def test_chat_rate_limit_returns_429(client):
         for response in responses[:10]
     )
     assert responses[10].status_code == 429
+    assert mock_agent.call_count == 10
 
+def test_chat_stream_rate_limit_returns_429(client, db_session):
+    headers = get_ai_auth_headers(client, db_session)
 
-def test_chat_stream_rate_limit_returns_429(client):
     with patch(
         "app.api.ai.stream_businesspilot",
         return_value=iter(["Test response"]),
-    ):
+    ) as mock_stream:
         responses = [
             client.post(
                 "/api/v1/ai/chat/stream",
                 json={"message": "Test streaming rate limit"},
+                headers=headers,
             )
             for _ in range(6)
         ]
@@ -385,3 +474,118 @@ def test_chat_stream_rate_limit_returns_429(client):
         for response in responses[:5]
     )
     assert responses[5].status_code == 429
+    assert mock_stream.call_count == 5
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "/api/v1/ai/chat",
+        "/api/v1/ai/chat/stream",
+    ],
+)
+def test_ai_chat_requires_authentication(client, endpoint):
+    response = client.post(
+        endpoint,
+        json={"message": "Show my business dashboard"},
+    )
+
+    assert response.status_code == 401
+
+def test_chat_cannot_access_another_users_conversation(
+    client,
+    db_session,
+):
+    owner_headers = get_ai_auth_headers(
+        client,
+        db_session,
+        email="ai-owner@example.com",
+    )
+
+    owner = db_session.query(User).filter(
+        User.email == "ai-owner@example.com"
+    ).first()
+
+    conversation = Conversation(
+        id="private-ai-chat-001",
+        title="Private conversation",
+        owner_id=owner.id,
+    )
+
+    db_session.add(conversation)
+    db_session.commit()
+
+    other_headers = get_ai_auth_headers(
+        client,
+        db_session,
+        email="ai-other@example.com",
+    )
+
+    with patch("app.api.ai.ask_businesspilot") as mock_agent:
+        response = client.post(
+            "/api/v1/ai/chat",
+            json={
+                "message": "Access this conversation",
+                "conversation_id": "private-ai-chat-001",
+            },
+            headers=other_headers,
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Conversation not found"
+    mock_agent.assert_not_called()
+
+    messages = db_session.query(ChatMessage).filter(
+        ChatMessage.conversation_id == "private-ai-chat-001"
+    ).all()
+
+    assert messages == []
+
+def test_chat_stream_cannot_access_another_users_conversation(
+    client,
+    db_session,
+):
+    owner_headers = get_ai_auth_headers(
+        client,
+        db_session,
+        email="ai-stream-owner@example.com",
+    )
+
+    owner = db_session.query(User).filter(
+        User.email == "ai-stream-owner@example.com"
+    ).first()
+
+    conversation = Conversation(
+        id="private-stream-chat-001",
+        title="Private streaming conversation",
+        owner_id=owner.id,
+    )
+
+    db_session.add(conversation)
+    db_session.commit()
+
+    other_headers = get_ai_auth_headers(
+        client,
+        db_session,
+        email="ai-stream-other@example.com",
+    )
+
+    with patch("app.api.ai.stream_businesspilot") as mock_stream:
+        response = client.post(
+            "/api/v1/ai/chat/stream",
+            json={
+                "message": "Access this private conversation",
+                "conversation_id": "private-stream-chat-001",
+            },
+            headers=other_headers,
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Conversation not found."
+    mock_stream.assert_not_called()
+
+    messages = db_session.query(ChatMessage).filter(
+        ChatMessage.conversation_id == "private-stream-chat-001"
+    ).all()
+
+    assert messages == []

@@ -48,6 +48,13 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # Authentication and JWT configuration.
+    jwt_secret_key: str
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 15
+    refresh_token_expire_days: int = 7
+
+
     @property
     def resolved_database_url(self) -> str:
         """Resolve the database URL from local configuration or Docker secret."""

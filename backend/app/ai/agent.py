@@ -188,10 +188,14 @@ def normalize_ai_response(content) -> str:
 
     return str(content)
 
+
 def ask_businesspilot(
     question: str,
-    conversation_id: str = "default",
+    user_id: int,
+    conversation_id: str,
 ) -> str:
+    thread_id = f"user:{user_id}:conversation:{conversation_id}"
+
     try:
         result = agent.invoke(
             {
@@ -204,7 +208,7 @@ def ask_businesspilot(
             },
             config={
                 "configurable": {
-                    "thread_id": conversation_id,
+                    "thread_id": thread_id,
                 }
             },
         )
@@ -214,24 +218,23 @@ def ask_businesspilot(
         )
 
     except Exception:
-        logging.exception(
-            "BusinessPilot AI generation failed."
-        )
+        logger.exception("BusinessPilot AI request failed")
+        raise
 
-        return (
-            "I'm sorry, but BusinessPilot AI is temporarily "
-            "unavailable. Please check the AI service and try again."
-        )
+
 
 
 def stream_businesspilot(
     question: str,
-    conversation_id: str = "default",
+    user_id: int,
+    conversation_id: str,
 ):
     """
-    Stream the AI response token by token while preserving
+    Stream the AI response while maintaining user-scoped
     LangGraph conversation memory.
     """
+
+    thread_id = f"user:{user_id}:conversation:{conversation_id}"
 
     try:
         for message_chunk, metadata in agent.stream(
@@ -245,7 +248,7 @@ def stream_businesspilot(
             },
             config={
                 "configurable": {
-                    "thread_id": conversation_id,
+                    "thread_id": thread_id,
                 }
             },
             stream_mode="messages",
@@ -259,20 +262,15 @@ def stream_businesspilot(
                         yield content
 
                 elif isinstance(content, list):
-                    for block in content:
+                    for item in content:
                         if (
-                            isinstance(block, dict)
-                            and block.get("type") == "text"
-                            and isinstance(block.get("text"), str)
+                            isinstance(item, dict)
+                            and item.get("type") == "text"
                         ):
-                            yield block["text"]
+                            text = item.get("text", "")
+                            if text:
+                                yield text
 
     except Exception:
-        logging.exception(
-            "BusinessPilot AI streaming generation failed."
-        )
-
-        raise RuntimeError(
-            "BusinessPilot AI is temporarily unavailable. "
-            "Please check the AI service and try again."
-        ) from None
+        logger.exception("BusinessPilot AI streaming failed")
+        raise

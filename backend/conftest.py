@@ -11,6 +11,7 @@ from app.core.rate_limiter import limiter
 from app.core.config import settings
 from app.core.database import Base, get_db
 from app.models import (
+    User,
     Customer,
     Product,
     SalesOrder,

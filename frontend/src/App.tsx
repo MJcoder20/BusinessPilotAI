@@ -13,6 +13,7 @@ import {
   Users,
   FileText,
   LoaderCircle,
+  LogOut,
 } from "lucide-react";
 
 import {
@@ -26,6 +27,10 @@ import {
 import "./App.css";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+import { useAuth } from "./context/AuthContext";
+import AuthScreen from "./components/AuthScreen";
+
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -110,10 +115,30 @@ function App() {
   );
 
   const messages = activeConversation?.messages ?? [];
+  const { user, isLoading: authLoading, isAuthenticated, logout } = useAuth();
 
-  // Load saved conversations when the application opens.
+
+
+  // Load saved conversations only after authentication succeeds.
   useEffect(() => {
     let cancelled = false;
+
+    if (!isAuthenticated) {
+      setConversations([]);
+      setActiveId(null);
+      setInput("");
+      setHistoryError(null);
+      setLoadingHistory(false);
+      setLoadingConversation(false);
+
+      return () => {
+        cancelled = true;
+        loadRequestRef.current += 1;
+      };
+    }
+
+    setLoadingHistory(true);
+    setHistoryError(null);
 
     async function loadHistory() {
       try {
@@ -131,7 +156,6 @@ function App() {
 
         setConversations(mappedConversations);
 
-        // Automatically restore the most recently updated conversation.
         if (mappedConversations.length > 0) {
           const firstId = mappedConversations[0].id;
 
@@ -168,6 +192,8 @@ function App() {
               setLoadingConversation(false);
             }
           }
+        } else {
+          setActiveId(null);
         }
       } catch (error) {
         if (!cancelled) {
@@ -188,7 +214,7 @@ function App() {
       cancelled = true;
       loadRequestRef.current += 1;
     };
-  }, []);
+  }, [isAuthenticated]);
 
   // Automatically scroll to the latest message.
   useEffect(() => {
@@ -476,6 +502,17 @@ function App() {
       );
     }
   }
+  if (authLoading) {
+    return (
+      <div className="auth-screen">
+        <LoaderCircle size={28} className="spinner" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <AuthScreen />;
+  }
 
   return (
     <div className="app-container">
@@ -597,9 +634,31 @@ function App() {
             </div>
           </div>
 
-          <div className="model-indicator">
-            <span className="model-dot" />
-            Qwen 2.5 · Local
+          <div className="topbar-right">
+            <div className="model-indicator">
+              <span className="model-dot" />
+              Qwen 2.5 · Local
+            </div>
+
+            <div className="user-profile">
+              <div className="user-avatar">
+                {user?.full_name.charAt(0).toUpperCase()}
+              </div>
+
+              <div className="user-details">
+                <strong>{user?.full_name}</strong>
+                <span>{user?.role}</span>
+              </div>
+
+              <button
+                className="logout-button"
+                onClick={() => void logout()}
+                title="Sign out"
+                aria-label="Sign out"
+              >
+                <LogOut size={18} />
+              </button>
+            </div>
           </div>
         </header>
 

@@ -5,8 +5,9 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.core.dependencies import get_current_user, require_roles
 from app.core.database import get_db
-from app.models import Invoice, Customer, SalesOrder
+from app.models import Invoice, Customer, SalesOrder, User
 from app.schemas.invoice import (
     InvoiceCreate,
     InvoiceResponse,
@@ -19,7 +20,8 @@ router = APIRouter(prefix="/invoices", tags=["Invoices"])
 @router.post("/", response_model=InvoiceResponse, status_code=201)
 def create_invoice(
     invoice_data: InvoiceCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "manager")),
 ):
     customer = db.query(Customer).filter(
         Customer.id == invoice_data.customer_id
@@ -84,7 +86,8 @@ def get_invoices(
     status: str | None = None,
     customer_id: int | None = Query(default=None, gt=0),
     overdue_only: bool = False,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     query = db.query(Invoice)
 
@@ -104,7 +107,7 @@ def get_invoices(
 
 
 @router.get("/{invoice_id}", response_model=InvoiceResponse)
-def get_invoice(invoice_id: int, db: Session = Depends(get_db)):
+def get_invoice(invoice_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user),):
     invoice = db.query(Invoice).filter(
         Invoice.id == invoice_id
     ).first()
@@ -119,7 +122,8 @@ def get_invoice(invoice_id: int, db: Session = Depends(get_db)):
 def record_payment(
     invoice_id: int,
     payment_data: PaymentCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "manager")),
 ):
     try:
         invoice = (

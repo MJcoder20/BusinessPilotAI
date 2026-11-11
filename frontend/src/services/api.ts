@@ -1,12 +1,158 @@
+import axios, {
+  type InternalAxiosRequestConfig,
+} from "axios";
 
-import axios from "axios";
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
+  withCredentials: true,
   headers: {
     "Content-Type": "application/json",
   },
 });
+
+// Authentication types
+export interface AuthUser {
+  id: number;
+  full_name: string;
+  email: string;
+  role: "admin" | "manager" | "employee";
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface AuthTokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  user: AuthUser;
+}
+
+// Access tokens are stored only in memory.
+let accessToken: string | null = null;
+
+export function setAccessToken(token: string | null): void {
+  accessToken = token;
+}
+
+export function getAccessToken(): string | null {
+  return accessToken;
+}
+
+// Prevent simultaneous requests from refreshing multiple times.
+let refreshPromise: Promise<string> | null = null;
+
+export function refreshAccessToken(): Promise<string> {
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+
+  refreshPromise = axios
+    .post<AuthTokenResponse>(
+      `${api.defaults.baseURL}/auth/refresh`,
+      null,
+      { withCredentials: true }
+    )
+    .then((response) => {
+      const token = response.data.access_token;
+      setAccessToken(token);
+      return token;
+    })
+    .catch((error: unknown) => {
+      setAccessToken(null);
+      window.dispatchEvent(new Event("auth:session-expired"));
+      throw error;
+    })
+    .finally(() => {
+      refreshPromise = null;
+    });
+
+  return refreshPromise;
+}
+
+export async function login(
+  email: string,
+  password: string
+): Promise<AuthTokenResponse> {
+  const response = await api.post<AuthTokenResponse>(
+    "/auth/login",
+    { email, password }
+  );
+
+  setAccessToken(response.data.access_token);
+
+  return response.data;
+}
+
+export async function register(
+  full_name: string,
+  email: string,
+  password: string
+): Promise<AuthUser> {
+  const response = await api.post<AuthUser>(
+    "/auth/register",
+    { full_name, email, password }
+  );
+
+  return response.data;
+}
+
+export async function getCurrentUser(): Promise<AuthUser> {
+  const response = await api.get<AuthUser>("/auth/me");
+  return response.data;
+}
+
+export async function logout(): Promise<void> {
+  try {
+    await api.post("/auth/logout");
+  } finally {
+    setAccessToken(null);
+  }
+}
+
+// Attach the access token to authenticated API requests.
+api.interceptors.request.use((config) => {
+  if (accessToken) {
+    config.headers.Authorization = `Bearer ${accessToken}`;
+  }
+
+  return config;
+});
+
+// Refresh expired access tokens and retry failed requests once.
+api.interceptors.response.use(
+  (response) => response,
+  async (error: unknown) => {
+    if (!axios.isAxiosError(error)) {
+      return Promise.reject(error);
+    }
+
+    const originalRequest = error.config as
+      | (InternalAxiosRequestConfig & { _retry?: boolean })
+      | undefined;
+
+    if (
+      error.response?.status !== 401 ||
+      !originalRequest ||
+      originalRequest._retry ||
+      originalRequest.url?.includes("/auth/")
+    ) {
+      return Promise.reject(error);
+    }
+
+    originalRequest._retry = true;
+
+    try {
+      const token = await refreshAccessToken();
+
+      originalRequest.headers.Authorization = `Bearer ${token}`;
+
+      return api(originalRequest);
+    } catch (refreshError) {
+      return Promise.reject(refreshError);
+    }
+  }
+);
 
 // Chat types
 export interface ChatRequest {
@@ -90,6 +236,7 @@ export async function deleteConversation(
 
 
 // Stream an AI response using Server-Sent Events (SSE)
+
 export async function streamMessage(
   message: string,
   conversationId: string | null,
@@ -97,21 +244,35 @@ export async function streamMessage(
   onConversationId: (id: string) => void,
   signal?: AbortSignal
 ): Promise<void> {
-  const response = await fetch(
-    `${import.meta.env.VITE_API_URL}/ai/chat/stream`,
-    {
+  const url = `${import.meta.env.VITE_API_URL}/ai/chat/stream`;
+
+  const requestBody = JSON.stringify({
+    message,
+    conversation_id: conversationId,
+  });
+
+  const sendRequest = (token: string | null) =>
+    fetch(url, {
       method: "POST",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
+        ...(token
+          ? { Authorization: `Bearer ${token}` }
+          : {}),
       },
-      body: JSON.stringify({
-        message,
-        conversation_id: conversationId,
-      }),
+      body: requestBody,
       signal,
-    }
-  );
+    });
+
+  let response = await sendRequest(getAccessToken());
+
+  // Refresh an expired access token and retry once.
+  if (response.status === 401) {
+    const newToken = await refreshAccessToken();
+    response = await sendRequest(newToken);
+  }
 
   if (!response.ok) {
     const errorText = await response.text();

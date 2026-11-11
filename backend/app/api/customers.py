@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.models import Customer
+from app.core.dependencies import get_current_user, require_roles
+from app.models import Customer, User
 from app.schemas.customer import CustomerCreate, CustomerResponse
 from fastapi import Response
 from math import ceil
@@ -18,7 +19,8 @@ router = APIRouter(prefix="/customers", tags=["Customers"])
 )
 def create_customer(
     customer_data: CustomerCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "manager")),
 ):
     existing_customer = db.query(Customer).filter(
         Customer.email == customer_data.email
@@ -46,7 +48,8 @@ def get_customers(
     country: str | None = None,
     page: int = 1,
     page_size: int = 10,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     if page < 1:
         raise HTTPException(
@@ -106,7 +109,7 @@ def get_customers(
 
 
 @router.get("/{customer_id}", response_model=CustomerResponse)
-def get_customer(customer_id: int, db: Session = Depends(get_db)):
+def get_customer(customer_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user),):
     customer = db.query(Customer).filter(
         Customer.id == customer_id
     ).first()
@@ -124,7 +127,8 @@ def get_customer(customer_id: int, db: Session = Depends(get_db)):
 def update_customer(
     customer_id: int,
     customer_data: CustomerCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "manager")),
 ):
     customer = db.query(Customer).filter(
         Customer.id == customer_id
@@ -153,7 +157,8 @@ def update_customer(
 @router.delete("/{customer_id}", status_code=204)
 def delete_customer(
     customer_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin")),
 ):
     customer = db.query(Customer).filter(
         Customer.id == customer_id

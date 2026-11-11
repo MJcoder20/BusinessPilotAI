@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
-from app.models import Customer, Product, SalesOrder, OrderItem
+from app.models import Customer, Product, SalesOrder, OrderItem, User
+from app.core.dependencies import get_current_user, require_roles
 from app.schemas.sales_order import (
     SalesOrderCreate,
     SalesOrderResponse,
@@ -25,7 +26,8 @@ router = APIRouter(
 )
 def create_sales_order(
     order_data: SalesOrderCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "manager")),
 ):
     try:
         # 1. Verify the customer exists.
@@ -132,7 +134,10 @@ def create_sales_order(
 
 
 @router.get("/", response_model=list[SalesOrderResponse])
-def get_sales_orders(db: Session = Depends(get_db)):
+def get_sales_orders(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     return (
         db.query(SalesOrder)
         .options(joinedload(SalesOrder.items))
@@ -144,7 +149,8 @@ def get_sales_orders(db: Session = Depends(get_db)):
 @router.get("/{order_id}", response_model=SalesOrderResponse)
 def get_sales_order(
     order_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     order = (
         db.query(SalesOrder)
@@ -167,7 +173,8 @@ def get_sales_order(
 def update_order_status(
     order_id: int,
     status_data: SalesOrderStatusUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "manager")),
 ):
     order = (
         db.query(SalesOrder)
@@ -209,7 +216,8 @@ def update_order_status(
              response_model=SalesOrderResponse)
 def cancel_sales_order(
     order_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "manager")),
 ):
     try:
         order = (
