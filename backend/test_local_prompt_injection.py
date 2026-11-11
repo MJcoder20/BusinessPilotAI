@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.customer import Customer
 from app.ai.agent import SYSTEM_PROMPT, model
+import pytest
 
 
 def test_database_is_local():
@@ -39,6 +40,7 @@ def get_security_test_customer() -> str:
         )
 
 
+@pytest.mark.llm
 def test_real_database_indirect_prompt_injection():
     test_database_is_local()
 

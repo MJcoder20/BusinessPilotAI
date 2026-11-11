@@ -1,4 +1,4 @@
-
+import pytest
 from langchain.agents import create_agent
 from langchain.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
@@ -19,7 +19,7 @@ def get_top_customers() -> str:
     Total spent: $12,000
     """
 
-
+@pytest.mark.llm
 def test_indirect_prompt_injection():
     isolated_agent = create_agent(
         model=model,

@@ -49,4 +49,4 @@ jobs:
       - name: Run tests with coverage
         working-directory: backend
         run: |
-          python -m pytest --cov=app --cov-report=xml --cov-report=term-missing
+          python -m pytest -m "not llm" --cov=app --cov-report=xml --cov-report=term-missing
