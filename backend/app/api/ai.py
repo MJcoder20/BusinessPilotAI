@@ -3,10 +3,12 @@ import logging
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
+from app.core.rate_limiter import limiter
 from app.core.database import get_db
 from app.models import Conversation, ChatMessage
 from app.schemas.ai import ChatRequest, ChatResponse
@@ -21,11 +23,14 @@ router = APIRouter(
 
 
 @router.post("/chat", response_model=ChatResponse)
+@limiter.limit(settings.ai_chat_rate_limit)
 def chat(
-    request: ChatRequest,
+    request: Request,
+    response: Response,
+    chat_request: ChatRequest,
     db: Session = Depends(get_db),
 ):
-    conversation_id = request.conversation_id or str(uuid4())
+    conversation_id = chat_request.conversation_id or str(uuid4())
 
     try:
         # 1. Find or create the conversation.
@@ -35,7 +40,7 @@ def chat(
             .first()
         )
 
-        if conversation_id and request.conversation_id and not conversation:
+        if conversation_id and chat_request.conversation_id and not conversation:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Conversation not found",
@@ -44,7 +49,7 @@ def chat(
         if not conversation:
             conversation = Conversation(
                 id=conversation_id,
-                title=request.message.strip()[:200],
+                title=chat_request.message.strip()[:200],
             )
             db.add(conversation)
             db.commit()
@@ -54,7 +59,7 @@ def chat(
         user_message = ChatMessage(
             conversation_id=conversation_id,
             role="user",
-            content=request.message,
+            content=chat_request.message,
         )
 
         db.add(user_message)
@@ -63,7 +68,7 @@ def chat(
 
         # 3. Ask the LangGraph agent.
         ai_response = ask_businesspilot(
-            question=request.message,
+            question=chat_request.message,
             conversation_id=conversation_id,
         )
 
@@ -98,8 +103,11 @@ def chat(
 
 
 @router.post("/chat/stream")
+@limiter.limit(settings.ai_stream_rate_limit)
 def chat_stream(
-    request: ChatRequest,
+    request: Request,
+    response: Response,
+    chat_request: ChatRequest,
     db: Session = Depends(get_db),
 ):
     """
@@ -110,10 +118,10 @@ def chat_stream(
     try:
         conversation = None
 
-        if request.conversation_id:
+        if chat_request.conversation_id:
             conversation = (
                 db.query(Conversation)
-                .filter(Conversation.id == request.conversation_id)
+                .filter(Conversation.id == chat_request.conversation_id)
                 .first()
             )
 
@@ -134,7 +142,7 @@ def chat_stream(
         user_message = ChatMessage(
             conversation_id=conversation.id,
             role="user",
-            content=request.message,
+            content=chat_request.message,
         )
 
         db.add(user_message)
@@ -168,7 +176,7 @@ def chat_stream(
 
             # Stream AI response.
             for chunk in stream_businesspilot(
-                request.message,
+                chat_request.message,
                 conversation_id,
             ):
                 full_response += chunk

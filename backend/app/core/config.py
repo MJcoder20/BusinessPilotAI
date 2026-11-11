@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     app_env: Literal["development", "production"] = "development"
     frontend_origin: str = "http://localhost:5173"
 
+    # API rate limiting.
+    ai_chat_rate_limit: str = "10/minute"
+    ai_stream_rate_limit: str = "5/minute"
     # Local development database URL.
     database_url: str | None = None
 

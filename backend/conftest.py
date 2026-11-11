@@ -7,6 +7,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
 from app.main import app
+from app.core.rate_limiter import limiter
 from app.core.config import settings
 from app.core.database import Base, get_db
 from app.models import (
@@ -20,6 +21,10 @@ from app.models import (
     ChatMessage,
 )
 
+
+@pytest.fixture(autouse=True)
+def reset_rate_limits():
+    limiter._storage.reset()
 
 TEST_DATABASE_URL = make_url(
     settings.resolved_database_url

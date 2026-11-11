@@ -345,3 +345,43 @@ def test_unexpected_exception_returns_safe_response():
     )
 
     assert internal_error not in response.body.decode()
+
+
+def test_chat_rate_limit_returns_429(client):
+    with patch(
+        "app.api.ai.ask_businesspilot",
+        return_value="Test response",
+    ):
+        responses = [
+            client.post(
+                "/api/v1/ai/chat",
+                json={"message": "Test rate limiting"},
+            )
+            for _ in range(11)
+        ]
+
+    assert all(
+        response.status_code == 200
+        for response in responses[:10]
+    )
+    assert responses[10].status_code == 429
+
+
+def test_chat_stream_rate_limit_returns_429(client):
+    with patch(
+        "app.api.ai.stream_businesspilot",
+        return_value=iter(["Test response"]),
+    ):
+        responses = [
+            client.post(
+                "/api/v1/ai/chat/stream",
+                json={"message": "Test streaming rate limit"},
+            )
+            for _ in range(6)
+        ]
+
+    assert all(
+        response.status_code == 200
+        for response in responses[:5]
+    )
+    assert responses[5].status_code == 429

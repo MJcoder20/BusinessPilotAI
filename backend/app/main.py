@@ -3,7 +3,10 @@ from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
+from app.core.rate_limiter import limiter
 from app.api import products
 from app.api import customers
 from app.api import sales_orders
@@ -47,6 +50,11 @@ app = FastAPI(
     openapi_url="/openapi.json" if settings.app_env == "development" else None,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(
+    RateLimitExceeded,
+    _rate_limit_exceeded_handler,
+)
 
 logger = logging.getLogger(__name__)
 
