@@ -1,354 +1,290 @@
-\# BusinessPilot AI — Enterprise AI Business Assistant
-
-
-
-<p align="center">
-
-&#x20; <strong>An AI-powered business assistant for querying business data through natural language.</strong>
-
-</p>
-
-
+# 🚀 BusinessPilot AI
+### Enterprise AI Business Assistant
 
 <p align="center">
-
-&#x20; <a href="https://businesspilotai.onrender.com"><strong>🚀 Live Application</strong></a>
-
-&#x20; \&nbsp; | \&nbsp;
-
-&#x20; <a href="https://github.com/MJcoder20/BusinessPilotAI">GitHub Repository</a>
-
+  <strong>Turn business data into actionable insights through natural language.</strong>
 </p>
 
+<p align="center">
+  <a href="https://businesspilotai.onrender.com">
+    <img src="https://img.shields.io/badge/🌐_Live_Demo-Visit_Application-2563EB?style=for-the-badge" alt="Live Demo" />
+  </a>
+  <a href="https://github.com/MJcoder20/BusinessPilotAI">
+    <img src="https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github" alt="GitHub Repository" />
+  </a>
+</p>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.x-3776AB?style=flat-square&logo=python&logoColor=white" />
+  <img src="https://img.shields.io/badge/FastAPI-Backend-009688?style=flat-square&logo=fastapi&logoColor=white" />
+  <img src="https://img.shields.io/badge/React-Frontend-61DAFB?style=flat-square&logo=react&logoColor=black" />
+  <img src="https://img.shields.io/badge/TypeScript-Language-3178C6?style=flat-square&logo=typescript&logoColor=white" />
+  <img src="https://img.shields.io/badge/PostgreSQL-Database-4169E1?style=flat-square&logo=postgresql&logoColor=white" />
+  <img src="https://img.shields.io/badge/Docker-Containerization-2496ED?style=flat-square&logo=docker&logoColor=white" />
+</p>
 
-\---
+---
 
+## 📌 Overview
 
+**BusinessPilot AI** is a full-stack AI-powered business assistant that enables users to interact with business information using natural language.
 
-\## Overview
+Instead of manually navigating dashboards and reports, users can ask questions about their business operations and receive AI-generated answers based on structured CRM and ERP data.
 
+The application combines conversational AI, business analytics, database integration, and secure user management in a production-deployed application.
 
+## ✨ Key Features
 
-BusinessPilot AI is an AI-powered business assistant designed to help organizations interact with their business data using natural language.
-
-
-
-Instead of manually navigating multiple business reports, users can ask questions and receive AI-generated insights based on available CRM and ERP data.
-
-
-
-The application combines a conversational AI interface, business analytics tools, persistent conversations, and role-based authentication in a full-stack architecture.
-
-
-
-\## Key Features
-
-
-
-\- \*\*AI Business Assistant:\*\* Ask business-related questions using natural language.
-
-\- \*\*Business Analytics:\*\* Retrieve dashboard insights, top customers, low-stock products, overdue invoices, and daily revenue.
-
-\- \*\*Streaming Responses:\*\* Receive AI responses token by token.
-
-\- \*\*Conversation Management:\*\* Create, retrieve, and manage persistent chat conversations.
-
-\- \*\*Authentication:\*\* Secure registration, login, access tokens, and refresh-token rotation.
-
-\- \*\*Role-Based Access Control:\*\* Admin, manager, and employee permissions.
-
-\- \*\*Data Persistence:\*\* PostgreSQL database with SQLAlchemy and Alembic migrations.
-
-\- \*\*Responsive Interface:\*\* React and TypeScript frontend.
-
-
-
-\## Technology Stack
-
-
-
-| Layer | Technologies |
-
+| Feature | Description |
 |---|---|
+| 🤖 AI Business Assistant | Ask business questions using natural language. |
+| 📊 Business Analytics | Retrieve relevant business metrics and insights. |
+| ⚡ Streaming Responses | Receive AI responses token by token. |
+| 💬 Conversation History | Create, retrieve, and manage persistent conversations. |
+| 🔐 Authentication | Secure registration, login, and session management. |
+| 👥 Role-Based Access | Different permissions for admins, managers, and employees. |
+| 🗄️ Database Integration | Persistent business data using PostgreSQL. |
+| 🐳 Docker Support | Containerized application infrastructure. |
 
-| Frontend | React, TypeScript, Vite |
+## 🧠 AI Capabilities
 
-| Backend | Python, FastAPI |
+BusinessPilot AI uses a LangGraph-powered agent with specialized business tools.
 
-| AI / Agents | LangChain, LangGraph |
+| AI Tool | Purpose |
+|---|---|
+| `get_business_dashboard` | Retrieve an overview of business performance. |
+| `get_top_customers` | Identify top customers. |
+| `get_low_stock_products` | Find products with low inventory. |
+| `get_overdue_invoices` | Identify overdue invoices. |
+| `get_daily_revenue` | Retrieve daily revenue information. |
 
-| AI Models | Google Gemini, Ollama |
+The agent uses these tools to answer questions using business database information rather than relying solely on general language-model knowledge.
 
-| Database | PostgreSQL, SQLAlchemy |
+## 🏗️ System Architecture
 
-| Migrations | Alembic |
-
-| Authentication | JWT, Argon2 |
-
-| Deployment | Render, Neon |
-
-| Infrastructure | Docker, Docker Compose |
-
-| Testing | Pytest |
-
-
-
-\## Architecture
-
-
-
-```text
-
-&#x20;               User
-
-&#x20;                |
-
-&#x20;                v
-
-&#x20;      React + TypeScript UI
-
-&#x20;                |
-
-&#x20;                v
-
-&#x20;         FastAPI Backend
-
-&#x20;                |
-
-&#x20;         Authentication
-
-&#x20;                |
-
-&#x20;                v
-
-&#x20;         LangGraph Agent
-
-&#x20;                |
-
-&#x20;         Business AI Tools
-
-&#x20;                |
-
-&#x20;                v
-
-&#x20;         PostgreSQL Database
-
-&#x20;                |
-
-&#x20;                v
-
-&#x20;      Business Analytics Results
-
+```mermaid
+flowchart TD
+    A[User] --> B[React + TypeScript Frontend]
+    B --> C[FastAPI Backend]
+    C --> D[Authentication & Authorization]
+    C --> E[LangGraph AI Agent]
+    E --> F[Gemini / Ollama]
+    E --> G[Business Analytics Tools]
+    G --> H[(PostgreSQL Database)]
+    H --> G
+    G --> E
+    E --> C
+    C --> B
 ```
 
+## 🛠️ Technology Stack
 
+### Frontend
+- React
+- TypeScript
+- Vite
+- Axios
 
-\## AI Business Tools
+### Backend
+- Python
+- FastAPI
+- SQLAlchemy
+- Alembic
 
+### Artificial Intelligence
+- LangChain
+- LangGraph
+- Google Gemini
+- Ollama
 
+### Database & Security
+- PostgreSQL
+- JWT authentication
+- Argon2 password hashing
+- Refresh-token rotation
+- Role-based access control
 
-The assistant currently integrates tools for:
+### Infrastructure & Deployment
+- Docker
+- Docker Compose
+- Render
+- Neon PostgreSQL
+- GitHub Actions
 
+## 📂 Project Structure
 
+```text
+BusinessPilotAI/
+│
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   ├── core/
+│   │   ├── models/
+│   │   ├── schemas/
+│   │   ├── services/
+│   │   └── ...
+│   ├── scripts/
+│   └── tests/
+│
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── context/
+│   │   ├── services/
+│   │   └── ...
+│   └── package.json
+│
+├── docs/
+├── infrastructure/
+├── .github/
+├── docker-compose.yml
+└── README.md
+```
 
-\- `get\_business\_dashboard`
+## 🚀 Live Application
 
-\- `get\_top\_customers`
-
-\- `get\_low\_stock\_products`
-
-\- `get\_overdue\_invoices`
-
-\- `get\_daily\_revenue`
-
-
-
-These tools allow the AI agent to retrieve relevant business information from the database.
-
-
-
-\## Application Screenshots
-
-
-
-Screenshots of the application can be added here.
-
-
-
-<!-- Add screenshots to a docs/screenshots directory and reference them here. -->
-
-
-
-\## Live Deployment
-
-
-
-\*\*Live Application:\*\* https://businesspilotai.onrender.com
-
-
+<p align="center">
+  <a href="https://businesspilotai.onrender.com">
+    <strong>👉 Open BusinessPilot AI</strong>
+  </a>
+</p>
 
 The application is deployed using:
 
+| Service | Platform |
+|---|---|
+| Frontend and reverse proxy | Render |
+| Backend API | Render |
+| PostgreSQL database | Neon |
+| Source code | GitHub |
 
+**Demo note:** The application uses free-tier hosting, so the first request after inactivity may take longer while services wake up. Use synthetic or non-sensitive business data when testing the public application.
 
-\- \*\*Render:\*\* Frontend and backend hosting.
+## 💻 Run Locally
 
-\- \*\*Neon:\*\* Managed PostgreSQL database.
+### Prerequisites
 
+- Python
+- Node.js and npm
+- PostgreSQL
+- Ollama (optional, for local model execution)
 
-
-The deployed application uses a same-origin reverse proxy for frontend-to-backend API communication.
-
-
-
-\*Note: The free hosting tier may introduce a delay when services wake up after inactivity.\*
-
-
-
-\## Running Locally
-
-
-
-\### Prerequisites
-
-
-
-\- Python
-
-\- Node.js and npm
-
-\- PostgreSQL
-
-\- Ollama (optional, for local AI model execution)
-
-
-
-\### Backend
-
-
+### 1. Clone the repository
 
 ```bash
+git clone https://github.com/MJcoder20/BusinessPilotAI.git
+cd BusinessPilotAI
+```
 
+### 2. Configure the backend
+
+```bash
 cd backend
-
-
-
 python -m venv .venv
-
 ```
 
-
-
-Activate the virtual environment, then install dependencies:
-
-
+Activate the virtual environment and install dependencies:
 
 ```bash
-
 pip install -r requirements.txt
-
 ```
 
+Create a local `backend/.env` file and configure the required database, authentication, and AI provider settings. Never commit secrets or production credentials.
 
-
-Configure the required environment variables in your local `.env` file, then run:
-
-
+Run database migrations:
 
 ```bash
-
 alembic upgrade head
-
-uvicorn app.main:app --reload
-
 ```
 
+Start the backend:
 
+```bash
+uvicorn app.main:app --reload
+```
 
-\### Frontend
-
-
+### 3. Configure the frontend
 
 Open another terminal:
 
-
-
 ```bash
-
 cd frontend
-
-
-
 npm install
-
-npm run dev
-
 ```
 
+Configure the frontend API URL for your local backend:
 
+```env
+VITE_API_URL=http://127.0.0.1:8000/api/v1
+```
 
-Configure `VITE\_API\_URL` to point to your local backend API.
+Start the frontend:
 
+```bash
+npm run dev
+```
 
+The application should now be available at:
 
-\## Security
+```text
+http://localhost:5173
+```
 
+## 🧪 Testing
 
+Run the backend test suite:
 
-The application includes:
+```bash
+cd backend
+pytest -q
+```
 
+The current verified test result:
 
+**158 passed**
 
-\- Password hashing with Argon2.
+Build the frontend for production:
 
-\- JWT-based authentication.
+```bash
+cd frontend
+npm run build
+```
 
-\- Refresh-token rotation and revocation.
+## 🔒 Security
 
-\- Role-based authorization.
+BusinessPilot AI implements several security mechanisms:
 
-\- Conversation ownership and access isolation.
+- Argon2 password hashing.
+- JWT-based access authentication.
+- HTTP-only refresh-token cookies.
+- Refresh-token rotation and revocation.
+- Role-based endpoint authorization.
+- Conversation ownership and access isolation.
+- Environment-based secret management.
 
-\- Environment-based configuration.
+## 🗺️ Roadmap
 
+Potential future improvements:
 
+- [ ] More advanced business intelligence tools.
+- [ ] Interactive analytics visualizations.
+- [ ] Additional CRM and ERP integrations.
+- [ ] Expanded reporting and export capabilities.
+- [ ] More comprehensive production monitoring.
 
-Use synthetic or non-sensitive business data when testing the public demo.
+## 👩‍💻 Author
 
+**Marah Hussam Abdullah HarounJouda**
 
+Computer Science Graduate | AI & Software Engineering
 
-\## Project Status
+- GitHub: [@MJcoder20](https://github.com/MJcoder20)
 
-
-
-The application is deployed and its current backend test suite and frontend production build have passed.
-
-
-
-\## Author
-
-
-
-\*\*Marah Hussam Abdullah HarounJouda\*\*
-
-
-
-Computer Science Graduate | AI \& Software Engineering
-
-
-
-\- GitHub: \[MJcoder20](https://github.com/MJcoder20)
-
-
-
-\---
-
-
+---
 
 <p align="center">
-
-&#x20; <strong>BusinessPilot AI — Turning Business Data into Conversational Insights.</strong>
-
+  <strong>BusinessPilot AI</strong>
+  <br />
+  Making business intelligence more accessible through AI.
 </p>
-
