@@ -5,6 +5,8 @@ import pytest
 from app.core.security import verify_password
 from app.models import RefreshToken, User
 from app.services.refresh_tokens import hash_refresh_token
+from app.core.config import settings
+
 
 def test_register_creates_employee_account(client, db_session):
     response = client.post(
@@ -194,7 +196,11 @@ def test_login_sets_secure_refresh_cookie(client):
 
     assert "businesspilot_refresh_token=" in cookie
     assert "httponly" in cookie
-    assert "samesite=lax" in cookie
+    assert "samesite=none" in cookie
+    if settings.app_env == "production":
+        assert "; secure" in cookie
+    else:
+        assert "; secure" not in cookie
     assert "path=/api/v1/auth" in cookie
 
 
@@ -255,6 +261,7 @@ def test_refresh_rejects_expired_token(client, db_session):
     assert "businesspilot_refresh_token=" in cookie
     assert "max-age=0" in cookie
     assert "httponly" in cookie
+    assert "samesite=none" in cookie
     assert "path=/api/v1/auth" in cookie
 
 
@@ -281,6 +288,8 @@ def test_logout_revokes_refresh_token(client, db_session):
 
     cookie = response.headers["set-cookie"].lower()
     assert "max-age=0" in cookie
+    assert "samesite=none" in cookie
+    assert "path=/api/v1/auth" in cookie
 
 
 @pytest.mark.parametrize(
