@@ -23,44 +23,23 @@ class User(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-
-    full_name: Mapped[str] = mapped_column(
-        String(150),
-        nullable=False,
-    )
-
+    full_name: Mapped[str] = mapped_column(String(150), nullable=False)
     email: Mapped[str] = mapped_column(
-        String(255),
-        unique=True,
-        nullable=False,
-        index=True,
+        String(255), unique=True, nullable=False, index=True
     )
-
-    password_hash: Mapped[str] = mapped_column(
-        String(255),
-        nullable=False,
-    )
-
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(
-        String(20),
-        nullable=False,
-        default="employee",
-        server_default="employee",
+        String(20), nullable=False, default="employee", server_default="employee"
     )
-
     is_active: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=True,
-        server_default="true",
+        Boolean, nullable=False, default=True, server_default="true"
     )
-
-    is_email_verified: Mapped[bool] = mapped_column(\n        Boolean,\n        nullable=False,\n        default=False,\n        server_default="false",\n    )\n\n    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
+    is_email_verified: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
     )
-
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

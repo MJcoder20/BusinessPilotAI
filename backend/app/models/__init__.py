@@ -7,7 +7,8 @@ from app.models.opportunity import Opportunity
 from app.models.conversation import Conversation
 from app.models.chat_message import ChatMessage
 from app.models.user import User
-from app.models.refresh_token import RefreshToken\nfrom app.models.email_verification_token import EmailVerificationToken\nfrom app.models.email_verification_token import EmailVerificationToken
+from app.models.refresh_token import RefreshToken
+from app.models.email_verification_token import EmailVerificationToken
 
 __all__ = [
     "Customer",
@@ -19,5 +20,6 @@ __all__ = [
     "Conversation",
     "ChatMessage",
     "User",
-    "RefreshToken",\n    "EmailVerificationToken",\n    "EmailVerificationToken",
+    "RefreshToken",
+    "EmailVerificationToken",
 ]
