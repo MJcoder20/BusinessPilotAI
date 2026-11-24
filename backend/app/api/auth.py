@@ -12,7 +12,8 @@ from app.core.security import create_access_token
 from app.models import User
 from app.schemas.auth import (
     LoginRequest,
-    RegisterRequest,\n    ResendVerificationRequest,
+    RegisterRequest,
+    ResendVerificationRequest,
     TokenResponse,
     UserResponse,
 )
