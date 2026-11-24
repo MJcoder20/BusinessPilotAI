@@ -114,6 +114,13 @@ def register(
             "configure SMTP and use the resend endpoint.",
             user.id,
         )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Your account was created, but the verification email could not "
+                "be sent. Please try resending after email service is available."
+            ),
+        )
     return user
 
 
