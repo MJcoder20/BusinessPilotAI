@@ -1,3 +1,5 @@
+import logging
+
 from fastapi.responses import JSONResponse
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
@@ -15,13 +17,18 @@ from app.schemas.auth import (
     UserResponse,
 )
 from app.services.auth import authenticate_user, register_user
+from app.services.email import send_verification_email
+from app.services.email_verification import (
+    create_email_verification_token,
+    verify_email_token,
+)
 from app.services.refresh_tokens import (
     issue_refresh_token,
     rotate_refresh_token,
     revoke_refresh_token,
 )
 
-
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 REFRESH_COOKIE_NAME = "businesspilot_refresh_token"
@@ -52,7 +59,6 @@ def clear_refresh_cookie(response: Response) -> None:
 
 def validate_cookie_request_origin(request: Request) -> None:
     origin = request.headers.get("origin")
-
     allowed_origins = (
         {settings.frontend_origin.rstrip("/")}
         if settings.app_env == "production"
@@ -63,7 +69,6 @@ def validate_cookie_request_origin(request: Request) -> None:
             "http://127.0.0.1:5174",
         }
     )
-
     if origin not in allowed_origins:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -84,18 +89,76 @@ def register(
     db: Session = Depends(get_db),
 ):
     try:
-        return register_user(db, user_data)
+        user = register_user(db, user_data)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
 
+    raw_token = create_email_verification_token(db, user)
+    verification_url = (
+        f"{settings.frontend_origin.rstrip('/')}/verify-email"
+        f"?token={raw_token}"
+    )
+    try:
+        sent = send_verification_email(user.email, verification_url)
+    except Exception:
+        logger.exception("Failed to send verification email to new account.")
+        sent = False
 
-@router.post(
-    "/login",
-    response_model=TokenResponse,
-)
+    if not sent:
+        logger.warning(
+            "Verification email could not be delivered for account id=%s; "
+            "configure SMTP and use the resend endpoint.",
+            user.id,
+        )
+    return user
+
+
+@router.post("/resend-verification", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("3/hour")
+def resend_verification(
+    request: Request,
+    payload: LoginRequest,
+    db: Session = Depends(get_db),
+):
+    # Same response for unknown, verified, and pending addresses.
+    user = (
+        db.query(User)
+        .filter(User.email == str(payload.email).strip().lower())
+        .first()
+    )
+    if user is not None and user.is_active and not user.is_email_verified:
+        raw_token = create_email_verification_token(db, user)
+        verification_url = (
+            f"{settings.frontend_origin.rstrip('/')}/verify-email"
+            f"?token={raw_token}"
+        )
+        try:
+            send_verification_email(user.email, verification_url)
+        except Exception:
+            logger.exception("Failed to resend verification email.")
+    return {"message": "If the account needs verification, an email will be sent."}
+
+
+@router.get("/verify-email")
+def verify_email(token: str, db: Session = Depends(get_db)):
+    if not token or len(token) > 256:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification link is invalid or expired.",
+        )
+    user = verify_email_token(db, token)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification link is invalid, expired, or already used.",
+        )
+    return {"message": "Email address verified. You can now log in."}
+
+
+@router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
 def login(
     request: Request,
@@ -103,29 +166,18 @@ def login(
     credentials: LoginRequest,
     db: Session = Depends(get_db),
 ):
-    user = authenticate_user(
-        db,
-        credentials.email,
-        credentials.password,
-    )
-
+    user = authenticate_user(db, credentials.email, credentials.password)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password.",
+            detail="Incorrect email or password. Verify your email before logging in.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    access_token = create_access_token(
-        user_id=user.id,
-        role=user.role,
-    )
-
+    access_token = create_access_token(user_id=user.id, role=user.role)
     refresh_token = issue_refresh_token(db, user.id)
     db.commit()
-
     set_refresh_cookie(response, refresh_token)
-
     return TokenResponse(
         access_token=access_token,
         expires_in=settings.access_token_expire_minutes * 60,
@@ -133,10 +185,7 @@ def login(
     )
 
 
-@router.post(
-    "/refresh",
-    response_model=TokenResponse,
-)
+@router.post("/refresh", response_model=TokenResponse)
 @limiter.limit("10/minute")
 def refresh(
     request: Request,
@@ -144,9 +193,7 @@ def refresh(
     db: Session = Depends(get_db),
 ):
     validate_cookie_request_origin(request)
-
     raw_token = request.cookies.get(REFRESH_COOKIE_NAME)
-
     if not raw_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -154,28 +201,17 @@ def refresh(
         )
 
     result = rotate_refresh_token(db, raw_token)
-
     if result is None:
         error_response = JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            content={
-                "detail": "Refresh token is invalid, expired, or revoked."
-            },
+            content={"detail": "Refresh token is invalid, expired, or revoked."},
         )
-
         clear_refresh_cookie(error_response)
-
         return error_response
 
     new_refresh_token, user = result
-
-    access_token = create_access_token(
-        user_id=user.id,
-        role=user.role,
-    )
-
+    access_token = create_access_token(user_id=user.id, role=user.role)
     set_refresh_cookie(response, new_refresh_token)
-
     return TokenResponse(
         access_token=access_token,
         expires_in=settings.access_token_expire_minutes * 60,
@@ -183,30 +219,19 @@ def refresh(
     )
 
 
-@router.post(
-    "/logout",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
 ):
     validate_cookie_request_origin(request)
-
     raw_token = request.cookies.get(REFRESH_COOKIE_NAME)
-
     if raw_token:
         revoke_refresh_token(db, raw_token)
-
     clear_refresh_cookie(response)
 
 
-@router.get(
-    "/me",
-    response_model=UserResponse,
-)
-def get_me(
-    current_user: User = Depends(get_current_user),
-):
+@router.get("/me", response_model=UserResponse)
+def get_me(current_user: User = Depends(get_current_user)):
     return current_user

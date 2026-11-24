@@ -42,6 +42,15 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-3.5-flash-lite"
 
+    # Provider-neutral SMTP configuration for verification emails.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from_email: str | None = None
+    smtp_use_tls: bool = True
+    verification_token_expire_minutes: int = 30
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -54,16 +63,13 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
 
-
     @property
     def resolved_database_url(self) -> str:
         """Resolve the database URL from local configuration or Docker secret."""
-
         if self.db_password_file:
             password = Path(self.db_password_file).read_text(
                 encoding="utf-8"
             ).rstrip("\r\n")
-
             return URL.create(
                 drivername="postgresql+psycopg",
                 username=self.db_user,

@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from typing import Literal
 
@@ -22,11 +21,10 @@ class RegisterRequest(BaseModel):
     @classmethod
     def validate_full_name(cls, value: str) -> str:
         value = value.strip()
-
         if len(value) < 2:
             raise ValueError("Full name must contain at least 2 characters.")
-
         return value
+
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -41,6 +39,7 @@ class UserResponse(BaseModel):
     email: EmailStr
     role: UserRole
     is_active: bool
+    is_email_verified: bool
     created_at: datetime
 
 

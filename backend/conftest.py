@@ -1,4 +1,3 @@
-
 import pytest
 
 from fastapi.testclient import TestClient
@@ -20,12 +19,19 @@ from app.models import (
     Opportunity,
     Conversation,
     ChatMessage,
+    EmailVerificationToken,
 )
 
 
 @pytest.fixture(autouse=True)
-def reset_rate_limits():
+def reset_rate_limits(monkeypatch):
     limiter._storage.reset()
+    # Tests exercise token creation, not an external SMTP server.
+    monkeypatch.setattr(
+        "app.api.auth.send_verification_email",
+        lambda recipient, verification_url: True,
+    )
+
 
 TEST_DATABASE_URL = make_url(
     settings.resolved_database_url
@@ -36,15 +42,9 @@ TEST_DATABASE_URL = make_url(
 
 @pytest.fixture(scope="session")
 def test_engine():
-    engine = create_engine(
-        TEST_DATABASE_URL,
-        pool_pre_ping=True,
-    )
-
+    engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
     Base.metadata.create_all(bind=engine)
-
     yield engine
-
     Base.metadata.drop_all(bind=engine)
     engine.dispose()
 
@@ -53,18 +53,14 @@ def test_engine():
 def db_session(test_engine):
     connection = test_engine.connect()
     transaction = connection.begin()
-
     TestingSessionLocal = sessionmaker(
         bind=connection,
         autoflush=False,
         autocommit=False,
         join_transaction_mode="create_savepoint",
     )
-
     session = TestingSessionLocal()
-
     yield session
-
     session.close()
     transaction.rollback()
     connection.close()
@@ -76,13 +72,7 @@ def client(db_session):
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
-
-    # Do not enter the TestClient context manager:
-    # this prevents application startup from initializing
-    # the real LangGraph checkpoint storage.
     test_client = TestClient(app)
-
     yield test_client
-
     test_client.close()
     app.dependency_overrides.clear()

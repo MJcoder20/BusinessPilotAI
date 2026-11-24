@@ -1,4 +1,3 @@
-
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -12,12 +11,12 @@ DUMMY_PASSWORD_HASH = PasswordHash.recommended().hash(
     "BusinessPilot-Dummy-Password-Not-For-Login"
 )
 
+
 def register_user(
     db: Session,
     user_data: RegisterRequest,
 ) -> User:
-    """Create a new employee account."""
-
+    """Create a new employee account awaiting email verification."""
     normalized_email = str(user_data.email).strip().lower()
 
     existing_user = (
@@ -35,6 +34,7 @@ def register_user(
         password_hash=hash_password(user_data.password),
         role="employee",
         is_active=True,
+        is_email_verified=False,
     )
 
     db.add(user)
@@ -56,8 +56,7 @@ def authenticate_user(
     email: str,
     password: str,
 ) -> User | None:
-    """Authenticate an active user with email and password."""
-
+    """Authenticate an active, email-verified user."""
     normalized_email = email.strip().lower()
 
     user = (
@@ -73,7 +72,7 @@ def authenticate_user(
     if not verify_password(password, user.password_hash):
         return None
 
-    if not user.is_active:
+    if not user.is_active or not user.is_email_verified:
         return None
 
     return user
