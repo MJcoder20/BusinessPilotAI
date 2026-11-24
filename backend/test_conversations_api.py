@@ -25,6 +25,10 @@ def get_conversation_auth_headers(
 
     assert user is not None
 
+    # API tests use verified accounts.
+    user.is_verified = True
+    db_session.commit()
+
     login_response = client.post(
         "/api/v1/auth/login",
         json={

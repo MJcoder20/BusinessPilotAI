@@ -35,6 +35,10 @@ def get_ai_auth_headers(
 
     assert user is not None
 
+    # These API tests require an already verified account.
+    user.is_verified = True
+    db_session.commit()
+
     login_response = client.post(
         "/api/v1/auth/login",
         json={

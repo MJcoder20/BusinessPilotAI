@@ -22,6 +22,8 @@ def get_invoice_auth_headers(
     user = db_session.query(User).filter(User.email == email).first()
     assert user is not None
 
+    # API tests use verified accounts.
+    user.is_verified = True
     user.role = role
     db_session.flush()
 

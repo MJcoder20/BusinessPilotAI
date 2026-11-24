@@ -8,6 +8,17 @@ from app.services.refresh_tokens import hash_refresh_token
 from app.core.config import settings
 
 
+@pytest.fixture(autouse=True)
+def mock_verification_email(monkeypatch):
+    sent_emails = []
+
+    monkeypatch.setattr(
+        "app.api.auth.send_verification_email",
+        lambda **kwargs: sent_emails.append(kwargs),
+    )
+
+    return sent_emails
+
 def test_register_creates_employee_account(client, db_session):
     response = client.post(
         "/api/v1/auth/register",
@@ -73,8 +84,12 @@ def test_register_does_not_allow_role_escalation(client):
     assert response.json()["role"] == "employee"
 
 
-def test_login_returns_access_token_and_current_user(client):
-    client.post(
+def test_login_returns_access_token_and_current_user(
+    client,
+    db_session,
+    mock_verification_email,
+):
+    register_response = client.post(
         "/api/v1/auth/register",
         json={
             "full_name": "Login Test",
@@ -82,7 +97,39 @@ def test_login_returns_access_token_and_current_user(client):
             "password": "SecurePassword123!",
         },
     )
+    assert register_response.status_code == 201
 
+    user = (
+        db_session.query(User)
+        .filter_by(email="login@example.com")
+        .first()
+    )
+    assert user is not None
+    assert user.is_verified is False
+
+    # Login must be blocked before email verification.
+    unverified_login = client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": "login@example.com",
+            "password": "SecurePassword123!",
+        },
+    )
+    assert unverified_login.status_code == 403
+
+    # Verify the email using the token captured by the mock.
+    verification_token = mock_verification_email[0]["verification_token"]
+
+    verification_response = client.post(
+        "/api/v1/auth/verify-email",
+        json={"token": verification_token},
+    )
+    assert verification_response.status_code == 200
+
+    db_session.refresh(user)
+    assert user.is_verified is True
+
+    # Login should now succeed.
     response = client.post(
         "/api/v1/auth/login",
         json={
@@ -90,26 +137,21 @@ def test_login_returns_access_token_and_current_user(client):
             "password": "SecurePassword123!",
         },
     )
-
     assert response.status_code == 200
 
     data = response.json()
-
     assert data["token_type"] == "bearer"
     assert data["access_token"]
     assert data["expires_in"] == 900
     assert data["user"]["email"] == "login@example.com"
+    assert data["user"]["is_verified"] is True
 
     me_response = client.get(
         "/api/v1/auth/me",
-        headers={
-            "Authorization": f"Bearer {data['access_token']}"
-        },
+        headers={"Authorization": f"Bearer {data['access_token']}"},
     )
-
     assert me_response.status_code == 200
     assert me_response.json()["email"] == "login@example.com"
-
 
 def test_login_rejects_incorrect_password(client):
     client.post(
@@ -167,9 +209,13 @@ def test_register_rate_limit_returns_429(client):
 
     assert responses[3].status_code == 429
 
-
-def create_test_user_and_login(client, email="refresh@example.com"):
-    client.post(
+def create_test_user_and_login(
+    client,
+    db_session,
+    mock_verification_email,
+    email="refresh@example.com",
+):
+    register_response = client.post(
         "/api/v1/auth/register",
         json={
             "full_name": "Refresh Test",
@@ -177,6 +223,15 @@ def create_test_user_and_login(client, email="refresh@example.com"):
             "password": "SecurePassword123!",
         },
     )
+    assert register_response.status_code == 201
+
+    verification_token = mock_verification_email[-1]["verification_token"]
+
+    verification_response = client.post(
+        "/api/v1/auth/verify-email",
+        json={"token": verification_token},
+    )
+    assert verification_response.status_code == 200
 
     return client.post(
         "/api/v1/auth/login",
@@ -187,8 +242,12 @@ def create_test_user_and_login(client, email="refresh@example.com"):
     )
 
 
-def test_login_sets_secure_refresh_cookie(client):
-    response = create_test_user_and_login(client)
+def test_login_sets_secure_refresh_cookie(client, db_session, mock_verification_email):
+    response = create_test_user_and_login(
+        client,
+        db_session,
+        mock_verification_email,
+    )
 
     assert response.status_code == 200
 
@@ -204,8 +263,12 @@ def test_login_sets_secure_refresh_cookie(client):
     assert "path=/api/v1/auth" in cookie
 
 
-def test_refresh_rotates_token_and_rejects_replay(client):
-    login_response = create_test_user_and_login(client)
+def test_refresh_rotates_token_and_rejects_replay(client, db_session, mock_verification_email):
+    login_response = create_test_user_and_login(
+        client,
+        db_session,
+        mock_verification_email,
+    )
     assert login_response.status_code == 200
 
     old_token = client.cookies.get("businesspilot_refresh_token")
@@ -233,8 +296,12 @@ def test_refresh_rotates_token_and_rejects_replay(client):
     assert replay_response.status_code == 401
 
 
-def test_refresh_rejects_expired_token(client, db_session):
-    login_response = create_test_user_and_login(client)
+def test_refresh_rejects_expired_token(client, db_session, mock_verification_email):
+    login_response = create_test_user_and_login(
+        client,
+        db_session,
+        mock_verification_email,
+    )
     assert login_response.status_code == 200
 
     raw_token = client.cookies.get("businesspilot_refresh_token")
@@ -265,8 +332,12 @@ def test_refresh_rejects_expired_token(client, db_session):
     assert "path=/api/v1/auth" in cookie
 
 
-def test_logout_revokes_refresh_token(client, db_session):
-    login_response = create_test_user_and_login(client)
+def test_logout_revokes_refresh_token(client, db_session, mock_verification_email):
+    login_response = create_test_user_and_login(
+        client,
+        db_session,
+        mock_verification_email,
+    )
     assert login_response.status_code == 200
 
     raw_token = client.cookies.get("businesspilot_refresh_token")

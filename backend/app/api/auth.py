@@ -11,10 +11,18 @@ from app.models import User
 from app.schemas.auth import (
     LoginRequest,
     RegisterRequest,
+    ResendVerificationRequest,
     TokenResponse,
     UserResponse,
+    VerifyEmailRequest,
 )
-from app.services.auth import authenticate_user, register_user
+from app.services.auth import (
+    authenticate_user,
+    create_verification_token,
+    register_user,
+    verify_email_token,
+)
+from app.services.email import send_verification_email
 from app.services.refresh_tokens import (
     issue_refresh_token,
     rotate_refresh_token,
@@ -84,13 +92,72 @@ def register(
     db: Session = Depends(get_db),
 ):
     try:
-        return register_user(db, user_data)
+        user = register_user(db, user_data)
+
+        verification_token = create_verification_token(db, user)
+
+        send_verification_email(
+            recipient_email=user.email,
+            full_name=user.full_name,
+            verification_token=verification_token,
+        )
+
+        return user
+
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
 
+@router.post("/verify-email")
+@limiter.limit("10/minute")
+def verify_email(
+    request: Request,
+    response: Response,
+    verification_data: VerifyEmailRequest,
+    db: Session = Depends(get_db),
+):
+    user = verify_email_token(db, verification_data.token)
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification link is invalid or expired. Please request a new one.",
+        )
+
+    return {
+        "message": "Email verified successfully. You can now log in."
+    }
+
+@router.post("/resend-verification")
+@limiter.limit("3/hour")
+def resend_verification(
+    request: Request,
+    response: Response,
+    verification_data: ResendVerificationRequest,
+    db: Session = Depends(get_db),
+):
+    normalized_email = str(verification_data.email).strip().lower()
+
+    user = (
+        db.query(User)
+        .filter(User.email == normalized_email)
+        .first()
+    )
+
+    if user and user.is_active and not user.is_verified:
+        verification_token = create_verification_token(db, user)
+
+        send_verification_email(
+            recipient_email=user.email,
+            full_name=user.full_name,
+            verification_token=verification_token,
+        )
+
+    return {
+        "message": "If an unverified account exists for this email, a verification email has been sent."
+    }
 
 @router.post(
     "/login",
@@ -114,6 +181,12 @@ def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password.",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email address before logging in.",
         )
 
     access_token = create_access_token(

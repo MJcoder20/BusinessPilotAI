@@ -26,6 +26,8 @@ def get_sales_auth_headers(
 
     assert user is not None
 
+    # API tests use verified accounts.
+    user.is_verified = True
     user.role = role
     db_session.flush()
 
