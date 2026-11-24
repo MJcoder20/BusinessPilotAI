@@ -12,7 +12,7 @@ from app.core.security import create_access_token
 from app.models import User
 from app.schemas.auth import (
     LoginRequest,
-    RegisterRequest,
+    RegisterRequest,\n    ResendVerificationRequest,
     TokenResponse,
     UserResponse,
 )
@@ -120,7 +120,7 @@ def register(
 @limiter.limit("3/hour")
 def resend_verification(
     request: Request,
-    payload: LoginRequest,
+    payload: ResendVerificationRequest,
     db: Session = Depends(get_db),
 ):
     # Same response for unknown, verified, and pending addresses.

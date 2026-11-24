@@ -97,6 +97,20 @@ export async function register(
   return response.data;
 }
 
+export async function verifyEmail(token: string): Promise<string> {
+  const response = await api.get<{ message: string }>("/auth/verify-email", {
+    params: { token },
+  });
+  return response.data.message;
+}
+
+export async function resendVerification(email: string): Promise<string> {
+  const response = await api.post<{ message: string }>("/auth/resend-verification", {
+    email,
+  });
+  return response.data.message;
+}
+
 export async function getCurrentUser(): Promise<AuthUser> {
   const response = await api.get<AuthUser>("/auth/me");
   return response.data;
