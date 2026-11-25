@@ -177,7 +177,7 @@ function App() {
                   ? {
                       ...item,
                       messages: detail.messages.map((message) => ({
-                        role: message.role,
+                        role: message.role === "user" ? "user" : "assistant",
                         content: message.content,
                       })),
                     }
@@ -275,7 +275,7 @@ function App() {
             ? {
                 ...item,
                 messages: detail.messages.map((message) => ({
-                  role: message.role,
+                  role: message.role === "user" ? "user" : "assistant",
                   content: message.content,
                 })),
               }

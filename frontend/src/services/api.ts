@@ -1,7 +1,6 @@
-import axios, {
-  type InternalAxiosRequestConfig,
-} from "axios";
 
+import axios, { type InternalAxiosRequestConfig } from "axios";
+import { supabase } from "./supabase";
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
@@ -31,6 +30,9 @@ export interface AuthTokenResponse {
 // Access tokens are stored only in memory.
 let accessToken: string | null = null;
 
+type AuthProvider = "legacy" | "supabase" | null;
+let authProvider: AuthProvider = null;
+
 export function setAccessToken(token: string | null): void {
   accessToken = token;
 }
@@ -39,7 +41,15 @@ export function getAccessToken(): string | null {
   return accessToken;
 }
 
-// Prevent simultaneous requests from refreshing multiple times.
+export function setAuthProvider(provider: AuthProvider): void {
+  authProvider = provider;
+}
+
+export function getAuthProvider(): AuthProvider {
+  return authProvider;
+}
+
+// Prevent simultaneous legacy refresh requests.
 let refreshPromise: Promise<string> | null = null;
 
 export function refreshAccessToken(): Promise<string> {
@@ -55,6 +65,7 @@ export function refreshAccessToken(): Promise<string> {
     )
     .then((response) => {
       const token = response.data.access_token;
+      setAuthProvider("legacy");
       setAccessToken(token);
       return token;
     })
@@ -70,28 +81,82 @@ export function refreshAccessToken(): Promise<string> {
   return refreshPromise;
 }
 
+// Refresh a Supabase session.
+export async function refreshSupabaseAccessToken(): Promise<string> {
+  const { data, error } = await supabase.auth.refreshSession();
+
+  if (error || !data.session) {
+    setAccessToken(null);
+    window.dispatchEvent(new Event("auth:session-expired"));
+    throw error ?? new Error("Supabase session has expired.");
+  }
+
+  const token = data.session.access_token;
+  setAccessToken(token);
+
+  return token;
+}
+
+// Refresh according to the active authentication provider.
+export function refreshCurrentAccessToken(): Promise<string> {
+  if (authProvider === "supabase") {
+    return refreshSupabaseAccessToken();
+  }
+
+  return refreshAccessToken();
+}
+
+// Existing legacy login.
 export async function login(
   email: string,
   password: string
 ): Promise<AuthTokenResponse> {
+  setAccessToken(null);
+  setAuthProvider(null);
+
   const response = await api.post<AuthTokenResponse>(
     "/auth/login",
     { email, password }
   );
 
+  setAuthProvider("legacy");
   setAccessToken(response.data.access_token);
 
   return response.data;
 }
 
+// New account registration through Supabase.
 export async function register(
   full_name: string,
   email: string,
   password: string
+): Promise<void> {
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { full_name },
+      emailRedirectTo: `${window.location.origin}/`,
+    },
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+
+// Synchronize an authenticated Supabase user with FastAPI.
+export async function syncSupabaseUser(
+  token: string
 ): Promise<AuthUser> {
   const response = await api.post<AuthUser>(
-    "/auth/register",
-    { full_name, email, password }
+    "/auth/supabase/sync",
+    null,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
   );
 
   return response.data;
@@ -102,15 +167,19 @@ export async function getCurrentUser(): Promise<AuthUser> {
   return response.data;
 }
 
+// Logout.
 export async function logout(): Promise<void> {
   try {
-    await api.post("/auth/logout");
+    if (authProvider === "legacy") {
+      await api.post("/auth/logout");
+    }
   } finally {
     setAccessToken(null);
+    setAuthProvider(null);
   }
 }
 
-// Attach the access token to authenticated API requests.
+// Attach the current access token to authenticated API requests.
 api.interceptors.request.use((config) => {
   if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`;
@@ -119,7 +188,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Refresh expired access tokens and retry failed requests once.
+// Refresh expired tokens and retry failed requests once.
 api.interceptors.response.use(
   (response) => response,
   async (error: unknown) => {
@@ -143,10 +212,8 @@ api.interceptors.response.use(
     originalRequest._retry = true;
 
     try {
-      const token = await refreshAccessToken();
-
+      const token = await refreshCurrentAccessToken();
       originalRequest.headers.Authorization = `Bearer ${token}`;
-
       return api(originalRequest);
     } catch (refreshError) {
       return Promise.reject(refreshError);
@@ -169,7 +236,7 @@ export interface ChatResponse {
 export interface ChatMessage {
   id: number;
   conversation_id: string;
-  role: "user" | "assistant";
+  role: string;
   content: string;
   created_at: string;
 }
@@ -185,58 +252,46 @@ export interface ConversationDetail extends Conversation {
   messages: ChatMessage[];
 }
 
-// Send a message to the AI
-export async function sendMessage(
-  message: string,
-  conversationId: string | null
-): Promise<ChatResponse> {
-  const response = await api.post<ChatResponse>("/ai/chat", {
-    message,
-    conversation_id: conversationId,
-  });
-
-  return response.data;
+export interface ConversationCreate {
+  title?: string;
 }
 
-// Create a new conversation
+// Conversation API functions
 export async function createConversation(
   title = "New conversation"
 ): Promise<Conversation> {
-  const response = await api.post<Conversation>("/conversations", {
-    title,
-  });
-
-  return response.data;
-}
-
-// Retrieve all conversations
-export async function getConversations(): Promise<Conversation[]> {
-  const response = await api.get<Conversation[]>("/conversations");
-
-  return response.data;
-}
-
-// Retrieve one conversation with its messages
-export async function getConversation(
-  conversationId: string
-): Promise<ConversationDetail> {
-  const response = await api.get<ConversationDetail>(
-    `/conversations/${conversationId}`
+  const response = await api.post<Conversation>(
+    "/conversations",
+    { title }
   );
 
   return response.data;
 }
 
-// Delete a conversation
+export async function getConversations(): Promise<Conversation[]> {
+  const response = await api.get<Conversation[]>("/conversations");
+  return response.data;
+}
+
+export async function getConversation(
+  conversationId: string
+): Promise<ConversationDetail> {
+  const response = await api.get<ConversationDetail>(
+    `/conversations/${encodeURIComponent(conversationId)}`
+  );
+
+  return response.data;
+}
+
 export async function deleteConversation(
   conversationId: string
 ): Promise<void> {
-  await api.delete(`/conversations/${conversationId}`);
+  await api.delete(
+    `/conversations/${encodeURIComponent(conversationId)}`
+  );
 }
 
-
-// Stream an AI response using Server-Sent Events (SSE)
-
+// Stream an AI response using Server-Sent Events (SSE).
 export async function streamMessage(
   message: string,
   conversationId: string | null,
@@ -258,9 +313,7 @@ export async function streamMessage(
       headers: {
         "Content-Type": "application/json",
         Accept: "text/event-stream",
-        ...(token
-          ? { Authorization: `Bearer ${token}` }
-          : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: requestBody,
       signal,
@@ -268,9 +321,8 @@ export async function streamMessage(
 
   let response = await sendRequest(getAccessToken());
 
-  // Refresh an expired access token and retry once.
   if (response.status === 401) {
-    const newToken = await refreshAccessToken();
+    const newToken = await refreshCurrentAccessToken();
     response = await sendRequest(newToken);
   }
 
@@ -287,7 +339,6 @@ export async function streamMessage(
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-
   let buffer = "";
 
   try {

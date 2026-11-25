@@ -4,7 +4,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import decode_access_token
+from app.core.security import (
+    decode_access_token,
+    decode_supabase_access_token,
+)
 from app.models import User
 
 
@@ -26,22 +29,34 @@ def get_current_user(
     if credentials is None:
         raise unauthorized
 
-    payload = decode_access_token(credentials.credentials)
+    token = credentials.credentials
 
-    if payload is None:
-        raise unauthorized
+    # First, preserve the existing legacy JWT authentication.
+    payload = decode_access_token(token)
 
-    user = (
-        db.query(User)
-        .filter(User.id == int(payload["sub"]))
-        .first()
-    )
+    if payload is not None:
+        user = (
+            db.query(User)
+            .filter(User.id == int(payload["sub"]))
+            .first()
+        )
+    else:
+        # Otherwise, verify the token as a Supabase ES256 JWT.
+        payload = decode_supabase_access_token(token)
+
+        if payload is None:
+            raise unauthorized
+
+        user = (
+            db.query(User)
+            .filter(User.supabase_user_id == payload["sub"])
+            .first()
+        )
 
     if user is None or not user.is_active:
         raise unauthorized
 
     return user
-
 
 def require_roles(*allowed_roles: str) -> Callable:
     """

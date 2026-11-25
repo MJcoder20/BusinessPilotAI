@@ -51,11 +51,14 @@ class Settings(BaseSettings):
     # Authentication and JWT configuration.
     jwt_secret_key: str
     jwt_algorithm: str = "HS256"
+    supabase_url: str | None = None
+    supabase_publishable_key: str | None = None
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
 
     # Email verification configuration.
     email_verification_expire_minutes: int = 30
+    resend_api_key: str | None = None
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_username: str | None = None

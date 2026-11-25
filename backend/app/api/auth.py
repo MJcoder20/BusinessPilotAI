@@ -1,12 +1,24 @@
+import httpx
 from fastapi.responses import JSONResponse
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.core.rate_limiter import limiter
-from app.core.security import create_access_token
+from app.core.security import (
+    create_access_token,
+    decode_supabase_access_token,
+)
 from app.models import User
 from app.schemas.auth import (
     LoginRequest,
@@ -23,6 +35,7 @@ from app.services.auth import (
     verify_email_token,
 )
 from app.services.email import send_verification_email
+from app.services.supabase_auth import sync_supabase_user
 from app.services.refresh_tokens import (
     issue_refresh_token,
     rotate_refresh_token,
@@ -31,6 +44,8 @@ from app.services.refresh_tokens import (
 
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+
+supabase_bearer_scheme = HTTPBearer(auto_error=False)
 
 REFRESH_COOKIE_NAME = "businesspilot_refresh_token"
 REFRESH_COOKIE_PATH = "/api/v1/auth"
@@ -283,3 +298,53 @@ def get_me(
     current_user: User = Depends(get_current_user),
 ):
     return current_user
+
+
+@router.post(
+    "/supabase/sync",
+    response_model=UserResponse,
+)
+def sync_supabase_account(
+    credentials: HTTPAuthorizationCredentials | None = Depends(
+        supabase_bearer_scheme
+    ),
+    db: Session = Depends(get_db),
+):
+    """Synchronize a verified Supabase identity with a local user."""
+
+    unauthorized = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired Supabase credentials.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    if credentials is None:
+        raise unauthorized
+
+    access_token = credentials.credentials
+    claims = decode_supabase_access_token(access_token)
+
+    if claims is None:
+        raise unauthorized
+
+    try:
+        user = sync_supabase_user(db, access_token, claims)
+        return user
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+
+    except httpx.RequestError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Supabase authentication service is temporarily unavailable.",
+        ) from None
+
+    except RuntimeError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Supabase authentication is not configured.",
+        ) from None

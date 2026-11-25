@@ -1,7 +1,14 @@
 
 import { useState, type FormEvent } from "react";
 import { AxiosError } from "axios";
-import { Bot, Eye, EyeOff, LoaderCircle, LockKeyhole } from "lucide-react";
+import {
+  Bot,
+  Eye,
+  EyeOff,
+  LoaderCircle,
+  LockKeyhole,
+  MailCheck,
+} from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 function getApiError(error: unknown): string {
@@ -20,6 +27,10 @@ function getApiError(error: unknown): string {
     }
   }
 
+  if (error instanceof Error) {
+    return error.message;
+  }
+
   return "Something went wrong. Please try again.";
 }
 
@@ -27,6 +38,7 @@ export default function AuthScreen() {
   const { login, register } = useAuth();
 
   const [isRegistering, setIsRegistering] = useState(false);
+  const [confirmationSent, setConfirmationSent] = useState(false);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -48,6 +60,7 @@ export default function AuthScreen() {
     try {
       if (isRegistering) {
         await register(fullName, email, password);
+        setConfirmationSent(true);
       } else {
         await login(email, password);
       }
@@ -60,8 +73,58 @@ export default function AuthScreen() {
 
   function switchMode() {
     setIsRegistering((previous) => !previous);
+    setConfirmationSent(false);
     setError("");
     setPassword("");
+  }
+
+  if (confirmationSent) {
+    return (
+      <main className="auth-screen">
+        <section className="auth-card">
+          <div className="auth-brand">
+            <div className="auth-brand-icon">
+              <Bot size={27} />
+            </div>
+            <div>
+              <h1>BusinessPilot</h1>
+              <span>AI BUSINESS ASSISTANT</span>
+            </div>
+          </div>
+
+          <div className="auth-heading">
+            <div className="auth-heading-icon">
+              <MailCheck size={25} />
+            </div>
+
+            <h2>Check your email</h2>
+
+            <p>
+              We've sent a confirmation link to{" "}
+              <strong>{email}</strong>.
+              Please confirm your email address before signing in.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="auth-submit-button"
+            onClick={() => {
+              setConfirmationSent(false);
+              setIsRegistering(false);
+              setPassword("");
+              setError("");
+            }}
+          >
+            Return to sign in
+          </button>
+
+          <p className="auth-security-note">
+            If you don't see the email, check your spam or junk folder.
+          </p>
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -150,6 +213,7 @@ export default function AuthScreen() {
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
+
             {isRegistering && (
               <small>Use at least 12 characters.</small>
             )}

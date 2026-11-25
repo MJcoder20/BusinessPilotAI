@@ -1,4 +1,3 @@
-
 from datetime import datetime
 
 from sqlalchemy import (
@@ -6,7 +5,9 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     String,
+    Uuid,
     func,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -21,10 +22,18 @@ class User(Base):
             "role IN ('admin', 'manager', 'employee')",
             name="ck_users_valid_role",
         ),
+        UniqueConstraint(
+            "supabase_user_id",
+            name="uq_users_supabase_user_id",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
+    supabase_user_id: Mapped[str | None] = mapped_column(
+        Uuid(as_uuid=False),
+        nullable=True,
+    )
     full_name: Mapped[str] = mapped_column(
         String(150),
         nullable=False,

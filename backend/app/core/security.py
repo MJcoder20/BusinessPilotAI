@@ -1,10 +1,12 @@
-
+from uuid import UUID
 from pwdlib import PasswordHash
 from pwdlib.exceptions import UnknownHashError
 
 from datetime import datetime, timedelta, timezone
 
+from functools import lru_cache
 import jwt
+
 from app.core.config import settings
 
 
@@ -64,6 +66,67 @@ def decode_access_token(token: str) -> dict | None:
         return payload
 
     except jwt.InvalidTokenError:
+        return None
+
+
+
+@lru_cache(maxsize=1)
+def get_supabase_jwks_client():
+    """Create a cached client for Supabase public signing keys."""
+    if not settings.supabase_url:
+        return None
+
+    jwks_url = (
+        f"{settings.supabase_url.rstrip('/')}"
+        "/auth/v1/.well-known/jwks.json"
+    )
+
+    return jwt.PyJWKClient(jwks_url)
+
+
+def decode_supabase_access_token(token: str) -> dict | None:
+    """Verify a Supabase ES256 access token and return its claims."""
+    try:
+        if not settings.supabase_url:
+            return None
+
+        jwks_client = get_supabase_jwks_client()
+
+        if jwks_client is None:
+            return None
+
+        signing_key = jwks_client.get_signing_key_from_jwt(token)
+
+        payload = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["ES256"],
+            audience="authenticated",
+            issuer=f"{settings.supabase_url.rstrip('/')}/auth/v1",
+            options={
+                "require": ["exp", "iat", "sub", "iss", "aud"],
+            },
+        )
+
+        subject = payload.get("sub")
+
+        if not isinstance(subject, str):
+            return None
+
+        try:
+            UUID(subject)
+        except ValueError:
+            return None
+
+        if payload.get("role") != "authenticated":
+            return None
+
+        if payload.get("is_anonymous") is not False:
+            return None
+
+        return payload
+
+    except (jwt.PyJWTError, OSError, ValueError):
         return None
 
 

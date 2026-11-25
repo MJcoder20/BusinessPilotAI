@@ -136,6 +136,11 @@ def authenticate_user(
         verify_password(password, DUMMY_PASSWORD_HASH)
         return None
 
+    # Supabase-linked accounts must authenticate through Supabase.
+    if user.supabase_user_id is not None:
+        verify_password(password, DUMMY_PASSWORD_HASH)
+        return None
+
     if not verify_password(password, user.password_hash):
         return None
 
