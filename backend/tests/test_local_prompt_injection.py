@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.customer import Customer
 from app.ai.agent import SYSTEM_PROMPT, model
+from app.ai.untrusted_data import sanitize_tool_results
 import pytest
 
 
@@ -61,6 +62,7 @@ def test_real_database_indirect_prompt_injection():
         tools=[get_security_test_customer],
         system_prompt=SYSTEM_PROMPT,
         checkpointer=InMemorySaver(),
+        middleware=[sanitize_tool_results],
     )
 
     response = isolated_agent.invoke(

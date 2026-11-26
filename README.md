@@ -45,6 +45,7 @@ The application combines conversational AI, business analytics, database integra
 | 👥 Role-Based Access | Different permissions for admins, managers, and employees. |
 | 🗄️ Database Integration | Persistent business data using PostgreSQL. |
 | 🐳 Docker Support | Containerized application infrastructure. |
+| 🔑 Password Recovery | Request password-reset emails and securely reset account passwords. |
 
 ## 🧠 AI Capabilities
 
@@ -90,6 +91,8 @@ flowchart TD
 - FastAPI
 - SQLAlchemy
 - Alembic
+- Password-reset service
+- Email verification and recovery workflows
 
 ### Artificial Intelligence
 - LangChain
@@ -115,30 +118,28 @@ flowchart TD
 
 ```text
 BusinessPilotAI/
-│
 ├── backend/
 │   ├── app/
+│   │   ├── ai/
 │   │   ├── api/
 │   │   ├── core/
 │   │   ├── models/
 │   │   ├── schemas/
-│   │   ├── services/
-│   │   └── ...
+│   │   └── services/
+│   ├── migrations/
 │   ├── scripts/
 │   └── tests/
-│
+│       ├── api/
+│       ├── security/
+│       ├── services/
+│       └── conftest.py
 ├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   ├── context/
-│   │   ├── services/
-│   │   └── ...
-│   └── package.json
-│
+│   └── src/
 ├── docs/
 ├── infrastructure/
 ├── .github/
 ├── docker-compose.yml
+├── pyproject.toml
 └── README.md
 ```
 
@@ -233,18 +234,24 @@ http://localhost:5173
 
 ## 🧪 Testing
 
-Run the backend test suite:
+Backend tests are organized by responsibility:
+
+- `tests/api/` — API endpoint tests.
+- `tests/security/` — Authentication and security tests.
+- `tests/services/` — Service-layer tests.
+- `tests/conftest.py` — Shared test fixtures.
+
+Run the non-LLM test suite from the project root:
 
 ```bash
-cd backend
-pytest -q
+pytest -q -m "not llm"
 ```
 
-The current verified test result:
+**Latest verified result:** 165 passed, 9 deselected, 0 failed.
 
-**158 passed**
+The deselected tests are marked `llm`.
 
-Build the frontend for production:
+Run the frontend production build:
 
 ```bash
 cd frontend
@@ -262,6 +269,8 @@ BusinessPilot AI implements several security mechanisms:
 - Role-based endpoint authorization.
 - Conversation ownership and access isolation.
 - Environment-based secret management.
+- Secure password-reset tokens with expiration and single-use validation.
+- Email-based password recovery.
 
 ## 🗺️ Roadmap
 

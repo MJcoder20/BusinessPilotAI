@@ -1,6 +1,12 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
+import jwt
+
+from app.core.security import (
+    create_access_token,
+    decode_access_token,
+)
 
 from app.core.security import verify_password
 from app.models import RefreshToken, User
@@ -377,3 +383,72 @@ def test_cookie_endpoints_reject_untrusted_origin(client, endpoint):
     )
 
     assert response.status_code == 403
+
+
+def test_access_token_accepts_valid_token():
+    token = create_access_token(user_id=1, role="employee")
+
+    payload = decode_access_token(token)
+
+    assert payload is not None
+    assert payload["sub"] == "1"
+    assert payload["role"] == "employee"
+    assert payload["type"] == "access"
+
+
+@pytest.mark.parametrize(
+    "missing_claim",
+    ["exp", "iat", "sub"],
+)
+def test_access_token_rejects_missing_required_claims(missing_claim):
+    now = datetime.now(timezone.utc)
+
+    payload = {
+        "sub": "1",
+        "role": "employee",
+        "type": "access",
+        "iat": now,
+        "exp": now + timedelta(minutes=15),
+    }
+
+    del payload[missing_claim]
+
+    token = jwt.encode(
+        payload,
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
+
+    assert decode_access_token(token) is None
+
+
+def test_access_token_rejects_wrong_token_type():
+    token = jwt.encode(
+        {
+            "sub": "1",
+            "role": "employee",
+            "type": "refresh",
+            "iat": datetime.now(timezone.utc),
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=15),
+        },
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
+
+    assert decode_access_token(token) is None
+
+
+def test_access_token_rejects_invalid_role():
+    token = jwt.encode(
+        {
+            "sub": "1",
+            "role": "superadmin",
+            "type": "access",
+            "iat": datetime.now(timezone.utc),
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=15),
+        },
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm,
+    )
+
+    assert decode_access_token(token) is None

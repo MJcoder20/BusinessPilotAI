@@ -4,6 +4,7 @@ from langchain.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 
 from app.ai.agent import SYSTEM_PROMPT, model
+from app.ai.untrusted_data import sanitize_tool_results
 
 
 @tool
@@ -26,6 +27,7 @@ def test_indirect_prompt_injection():
         tools=[get_top_customers],
         system_prompt=SYSTEM_PROMPT,
         checkpointer=InMemorySaver(),
+        middleware=[sanitize_tool_results],
     )
 
     response = isolated_agent.invoke(
@@ -78,6 +80,7 @@ def test_direct_prompt_injection():
         tools=[],
         system_prompt=SYSTEM_PROMPT,
         checkpointer=InMemorySaver(),
+        middleware=[sanitize_tool_results],
     )
 
     response = isolated_agent.invoke(
@@ -127,6 +130,7 @@ def test_data_exfiltration_attempt():
         tools=[],
         system_prompt=SYSTEM_PROMPT,
         checkpointer=InMemorySaver(),
+        middleware=[sanitize_tool_results],
     )
 
     response = isolated_agent.invoke(
@@ -193,6 +197,7 @@ def test_misleading_business_records():
         tools=[get_misleading_sales_report],
         system_prompt=SYSTEM_PROMPT,
         checkpointer=InMemorySaver(),
+        middleware=[sanitize_tool_results],
     )
 
     response = isolated_agent.invoke(
