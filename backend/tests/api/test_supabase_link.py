@@ -10,6 +10,16 @@ from app.services import supabase_auth
 
 @pytest.fixture
 def supabase_identity(monkeypatch):
+    monkeypatch.setattr(
+        supabase_auth.settings,
+        "supabase_url",
+        "https://example.supabase.co",
+    )
+    monkeypatch.setattr(
+        supabase_auth.settings,
+        "supabase_publishable_key",
+        "test-publishable-key",
+    )
     supabase_id = str(uuid4())
     email = "link-test@example.com"
 
