@@ -57,6 +57,12 @@ def get_ai_auth_headers(
 
 def test_chat_creates_conversation_and_saves_messages(client, db_session):
     headers = get_ai_auth_headers(client, db_session)
+    user = (
+        db_session.query(User)
+        .filter(User.email == "ai-test@example.com")
+        .first()
+    )
+    assert user is not None
     with patch(
         "app.api.ai.ask_businesspilot",
         return_value="Your business has 5 customers.",
@@ -76,7 +82,7 @@ def test_chat_creates_conversation_and_saves_messages(client, db_session):
 
     mock_agent.assert_called_once_with(
         question="How many customers do we have?",
-        user_id=1,
+        user_id=user.id,
         conversation_id=data["conversation_id"],
     )
 

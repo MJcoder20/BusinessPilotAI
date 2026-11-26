@@ -29,6 +29,7 @@ from app.schemas.auth import (
     VerifyEmailRequest,
     PasswordResetRequest,
     PasswordResetConfirmRequest,
+    LinkSupabaseAccountRequest,
 )
 from app.services.auth import (
     authenticate_user,
@@ -37,7 +38,10 @@ from app.services.auth import (
     verify_email_token,
 )
 from app.services.email import send_verification_email
-from app.services.supabase_auth import sync_supabase_user
+from app.services.supabase_auth import (
+    link_supabase_user,
+    sync_supabase_user,
+)
 from app.services.refresh_tokens import (
     issue_refresh_token,
     rotate_refresh_token,
@@ -389,6 +393,62 @@ def sync_supabase_account(
     try:
         user = sync_supabase_user(db, access_token, claims)
         return user
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+
+    except httpx.RequestError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Supabase authentication service is temporarily unavailable.",
+        ) from None
+
+    except RuntimeError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Supabase authentication is not configured.",
+        ) from None
+
+
+
+@router.post("/supabase/link", response_model=UserResponse)
+@limiter.limit("5/hour")
+def link_supabase_account(
+    request: Request,
+    response: Response,
+    link_data: LinkSupabaseAccountRequest,
+    credentials: HTTPAuthorizationCredentials | None = Depends(
+        supabase_bearer_scheme
+    ),
+    db: Session = Depends(get_db),
+):
+    """Link an existing local account to a verified Supabase identity."""
+
+    unauthorized = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired Supabase credentials.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    if credentials is None:
+        raise unauthorized
+
+    access_token = credentials.credentials
+    claims = decode_supabase_access_token(access_token)
+
+    if claims is None:
+        raise unauthorized
+
+    try:
+        return link_supabase_user(
+            db=db,
+            access_token=access_token,
+            claims=claims,
+            password=link_data.password,
+        )
 
     except ValueError as exc:
         raise HTTPException(

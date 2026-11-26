@@ -45,7 +45,6 @@ def test_engine():
 
     yield engine
 
-    Base.metadata.drop_all(bind=engine)
     engine.dispose()
 
 

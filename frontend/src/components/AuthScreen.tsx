@@ -1,4 +1,3 @@
-
 import { useState, type FormEvent } from "react";
 import { AxiosError } from "axios";
 import {
@@ -35,13 +34,15 @@ function getApiError(error: unknown): string {
 }
 
 export default function AuthScreen() {
-  const { login, register } = useAuth();
+  const { login, register, linkAccount } = useAuth();
 
   const [isRegistering, setIsRegistering] = useState(false);
   const [confirmationSent, setConfirmationSent] = useState(false);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [needsAccountLink, setNeedsAccountLink] = useState(false);
+  const [linkPassword, setLinkPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -50,7 +51,12 @@ export default function AuthScreen() {
     event.preventDefault();
     setError("");
 
-    if (isRegistering && password.length < 12) {
+    if (needsAccountLink && linkPassword.length === 0) {
+      setError("Please enter your original account password.");
+      return;
+    }
+
+    if (!needsAccountLink && isRegistering && password.length < 12) {
       setError("Your password must contain at least 12 characters.");
       return;
     }
@@ -58,14 +64,33 @@ export default function AuthScreen() {
     setLoading(true);
 
     try {
-      if (isRegistering) {
+      if (needsAccountLink) {
+        await linkAccount(linkPassword);
+        setNeedsAccountLink(false);
+        setLinkPassword("");
+      } else if (isRegistering) {
         await register(fullName, email, password);
         setConfirmationSent(true);
       } else {
         await login(email, password);
       }
     } catch (err: unknown) {
-      setError(getApiError(err));
+      const message = getApiError(err);
+
+      if (
+        !isRegistering &&
+        !needsAccountLink &&
+        message.toLowerCase().includes(
+          "contact support to link your accounts safely"
+        )
+      ) {
+        setNeedsAccountLink(true);
+        setError(
+          "Your Supabase account is verified, but an existing account was found. Enter the password you used for that original account to link them securely."
+        );
+      } else {
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -188,17 +213,30 @@ export default function AuthScreen() {
           </label>
 
           <label>
-            Password
+            {needsAccountLink ? "Original account password" : "Password"}
+
             <div className="auth-password-wrapper">
               <input
                 type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Enter your password"
-                minLength={isRegistering ? 12 : undefined}
+                value={needsAccountLink ? linkPassword : password}
+                onChange={(event) =>
+                  needsAccountLink
+                    ? setLinkPassword(event.target.value)
+                    : setPassword(event.target.value)
+                }
+                placeholder={
+                  needsAccountLink
+                    ? "Enter your original account password"
+                    : "Enter your password"
+                }
+                minLength={
+                  isRegistering && !needsAccountLink ? 12 : undefined
+                }
                 maxLength={128}
                 autoComplete={
-                  isRegistering ? "new-password" : "current-password"
+                  isRegistering && !needsAccountLink
+                    ? "new-password"
+                    : "current-password"
                 }
                 required
                 disabled={loading}
@@ -214,8 +252,15 @@ export default function AuthScreen() {
               </button>
             </div>
 
-            {isRegistering && (
+            {isRegistering && !needsAccountLink && (
               <small>Use at least 12 characters.</small>
+            )}
+
+            {needsAccountLink && (
+              <small>
+                Enter the password you used for your original account, not necessarily
+                your Supabase password.
+              </small>
             )}
           </label>
 
@@ -235,6 +280,8 @@ export default function AuthScreen() {
                 <LoaderCircle size={18} className="spinner" />
                 Please wait...
               </>
+            ) : needsAccountLink ? (
+              "Link existing account"
             ) : isRegistering ? (
               "Create account"
             ) : (

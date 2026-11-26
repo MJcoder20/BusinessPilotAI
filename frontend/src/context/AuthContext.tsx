@@ -1,4 +1,3 @@
-
 import {
   createContext,
   useCallback,
@@ -17,6 +16,7 @@ import {
   setAccessToken,
   setAuthProvider,
   syncSupabaseUser,
+  linkSupabaseAccount,
   type AuthUser,
 } from "../services/api";
 
@@ -27,6 +27,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
+  linkAccount: (password: string) => Promise<void>;
   register: (
     fullName: string,
     email: string,
@@ -133,9 +134,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
           setUser(currentUser);
           return;
         } catch (syncError) {
-          await supabase.auth.signOut();
-          setAccessToken(null);
-          setAuthProvider(null);
+          // Keep the Supabase session active so the user can link
+          // their existing local account.
           throw syncError;
         }
       }
@@ -157,6 +157,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // Preserve the legacy error for existing legacy users.
         throw legacyError;
       }
+    },
+    []
+  );
+
+  const linkAccount = useCallback(
+    async (password: string) => {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+
+      if (error || !session) {
+        throw new Error(
+          "Your Supabase session has expired. Please log in again."
+        );
+      }
+
+      const currentUser = await linkSupabaseAccount(
+        session.access_token,
+        password
+      );
+
+      setAuthProvider("supabase");
+      setAccessToken(session.access_token);
+      setUser(currentUser);
     },
     []
   );
@@ -197,6 +222,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         isLoading,
         isAuthenticated: user !== null,
         login,
+        linkAccount,
         register,
         logout,
       }}

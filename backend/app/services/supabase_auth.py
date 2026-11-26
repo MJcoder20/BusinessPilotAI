@@ -6,10 +6,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.security import verify_password
 from app.models import User
 from app.services.auth import DUMMY_PASSWORD_HASH
-
-
 def sync_supabase_user(
     db: Session,
     access_token: str,
@@ -121,3 +120,94 @@ def sync_supabase_user(
         ) from None
 
     return user
+def link_supabase_user(
+    db: Session,
+    access_token: str,
+    claims: dict,
+    password: str,
+) -> User:
+    """Safely link an unverified local account to a verified Supabase identity."""
+    if not settings.supabase_url or not settings.supabase_publishable_key:
+        raise RuntimeError("Supabase authentication is not configured.")
+    try:
+        supabase_user_id = str(UUID(claims["sub"]))
+    except (KeyError, ValueError, TypeError):
+        raise ValueError("Invalid Supabase identity.") from None
+
+    response = httpx.get(
+        f"{settings.supabase_url.rstrip('/')}/auth/v1/user",
+        headers={
+            "apikey": settings.supabase_publishable_key,
+            "Authorization": f"Bearer {access_token}",
+        },
+        timeout=10.0,
+    )
+
+    if response.status_code != 200:
+        raise ValueError("Unable to verify the Supabase account.")
+
+    supabase_user = response.json()
+
+    if str(supabase_user.get("id", "")) != supabase_user_id:
+        raise ValueError("Supabase identity does not match the access token.")
+
+    if not supabase_user.get("email_confirmed_at"):
+        raise ValueError("Please confirm your email address first.")
+
+    email = supabase_user.get("email")
+
+    if not isinstance(email, str) or not email.strip():
+        raise ValueError("The Supabase account has no valid email address.")
+
+    email = email.strip().lower()
+
+    token_email = claims.get("email")
+    if not isinstance(token_email, str) or token_email.strip().lower() != email:
+        raise ValueError("Supabase email does not match the access token.")
+
+    linked_user = (
+        db.query(User)
+        .filter(User.supabase_user_id == supabase_user_id)
+        .first()
+    )
+
+    if linked_user is not None:
+        db.rollback()
+        raise ValueError("This Supabase account is already linked.")
+
+    existing_user = (
+        db.query(User)
+        .filter(User.email == email)
+        .with_for_update()
+        .first()
+    )
+
+    if existing_user is None:
+        db.rollback()
+        raise ValueError("No existing account was found for this email.")
+
+    if not existing_user.is_active or existing_user.is_verified:
+        db.rollback()
+        raise ValueError("This account is not eligible for automatic linking.")
+
+    if existing_user.supabase_user_id is not None:
+        db.rollback()
+        raise ValueError("This account is already linked.")
+
+    if not verify_password(password, existing_user.password_hash):
+        db.rollback()
+        raise ValueError("The existing account password is incorrect.")
+
+    existing_user.supabase_user_id = supabase_user_id
+    existing_user.is_verified = True
+    existing_user.verification_token_hash = None
+    existing_user.verification_token_expires_at = None
+
+    try:
+        db.commit()
+        db.refresh(existing_user)
+    except IntegrityError:
+        db.rollback()
+        raise ValueError("The account could not be linked. Please try again.") from None
+
+    return existing_user

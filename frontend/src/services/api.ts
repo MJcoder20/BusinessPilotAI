@@ -162,6 +162,24 @@ export async function syncSupabaseUser(
   return response.data;
 }
 
+// Link an existing local account to an authenticated Supabase identity.
+export async function linkSupabaseAccount(
+  token: string,
+  password: string
+): Promise<AuthUser> {
+  const response = await api.post<AuthUser>(
+    "/auth/supabase/link",
+    { password },
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  return response.data;
+}
+
 export async function getCurrentUser(): Promise<AuthUser> {
   const response = await api.get<AuthUser>("/auth/me");
   return response.data;
