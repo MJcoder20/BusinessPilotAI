@@ -8,6 +8,7 @@ from app.models.conversation import Conversation
 from app.models.chat_message import ChatMessage
 from app.models.user import User
 from app.models.refresh_token import RefreshToken
+from app.models.password_reset_token import PasswordResetToken
 
 __all__ = [
     "Customer",
@@ -20,4 +21,5 @@ __all__ = [
     "ChatMessage",
     "User",
     "RefreshToken",
+    "PasswordResetToken",
 ]

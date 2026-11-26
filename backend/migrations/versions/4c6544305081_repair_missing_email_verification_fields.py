@@ -17,6 +17,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    if op.get_context().as_sql:
+        # These columns are created by the preceding migration.
+        return
+
     bind = op.get_bind()
     inspector = sa.inspect(bind)
 
@@ -55,8 +59,6 @@ def upgrade() -> None:
                 nullable=True,
             ),
         )
-
-
 def downgrade() -> None:
     # Keep the repaired columns to avoid accidentally losing user data.
     pass

@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-3.5-flash-lite"
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=Path(__file__).resolve().parents[2] / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -58,6 +58,7 @@ class Settings(BaseSettings):
 
     # Email verification configuration.
     email_verification_expire_minutes: int = 30
+    password_reset_expire_minutes: int = 30
     resend_api_key: str | None = None
     smtp_host: str | None = None
     smtp_port: int = 587

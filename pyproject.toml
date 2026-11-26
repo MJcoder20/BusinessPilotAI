@@ -9,6 +9,7 @@ dependencies = []
 testpaths = ["backend"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
+pythonpath = ["backend"]
 addopts = "-ra"
 markers = [
     "llm: tests that call a live language model and may require API credentials or incur costs",

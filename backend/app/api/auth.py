@@ -27,6 +27,8 @@ from app.schemas.auth import (
     TokenResponse,
     UserResponse,
     VerifyEmailRequest,
+    PasswordResetRequest,
+    PasswordResetConfirmRequest,
 )
 from app.services.auth import (
     authenticate_user,
@@ -40,6 +42,10 @@ from app.services.refresh_tokens import (
     issue_refresh_token,
     rotate_refresh_token,
     revoke_refresh_token,
+)
+from app.services.password_reset import (
+    request_password_reset,
+    confirm_password_reset,
 )
 
 
@@ -58,7 +64,7 @@ def set_refresh_cookie(response: Response, token: str) -> None:
         max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
         httponly=True,
         secure=settings.app_env == "production",
-        samesite="none",
+        samesite="none" if settings.app_env == "production" else "lax",
         path=REFRESH_COOKIE_PATH,
     )
 
@@ -68,7 +74,7 @@ def clear_refresh_cookie(response: Response) -> None:
         key=REFRESH_COOKIE_NAME,
         httponly=True,
         secure=settings.app_env == "production",
-        samesite="none",
+        samesite="none" if settings.app_env == "production" else "lax",
         path=REFRESH_COOKIE_PATH,
     )
 
@@ -173,6 +179,59 @@ def resend_verification(
     return {
         "message": "If an unverified account exists for this email, a verification email has been sent."
     }
+
+
+@router.post("/password-reset/request")
+@limiter.limit("3/hour")
+def password_reset_request(
+    request: Request,
+    response: Response,
+    reset_data: PasswordResetRequest,
+    db: Session = Depends(get_db),
+):
+    try:
+        request_password_reset(
+            db,
+            str(reset_data.email).strip().lower(),
+        )
+    except RuntimeError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Password-reset email could not be sent. Please try again later.",
+        ) from None
+
+    return {
+        "message": (
+            "If an eligible account exists for this email, "
+            "a password-reset link has been sent."
+        )
+    }
+
+
+@router.post("/password-reset/confirm")
+@limiter.limit("5/minute")
+def password_reset_confirm(
+    request: Request,
+    response: Response,
+    reset_data: PasswordResetConfirmRequest,
+    db: Session = Depends(get_db),
+):
+    success = confirm_password_reset(
+        db,
+        raw_token=reset_data.token,
+        new_password=reset_data.new_password,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password-reset link is invalid, expired, or already used.",
+        )
+
+    return {
+        "message": "Your password has been reset successfully. You can now log in."
+    }
+
 
 @router.post(
     "/login",

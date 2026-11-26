@@ -102,7 +102,9 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [loadingConversation, setLoadingConversation] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(
+    () => window.matchMedia("(min-width: 701px)").matches
+  );
   const [historyError, setHistoryError] = useState<string | null>(null);
 
   const sendingRef = useRef(false);
@@ -256,6 +258,7 @@ function App() {
 
     setActiveId(id);
     setInput("");
+    setSidebarOpen(false);
 
     // Unsaved local conversations do not need an API request.
     if (!conversation.serverId) return;
@@ -516,7 +519,17 @@ function App() {
 
   return (
     <div className="app-container">
-      <aside className={`sidebar ${sidebarOpen ? "" : "collapsed"}`}>
+      {sidebarOpen && (
+        <button
+          className="sidebar-backdrop"
+          onClick={() => setSidebarOpen(false)}
+          aria-label="Close navigation"
+        />
+      )}
+
+      <aside
+        className={`sidebar ${sidebarOpen ? "mobile-open" : "collapsed"}`}
+      >
         <div className="sidebar-header">
           <div className="brand">
             <div className="brand-icon">

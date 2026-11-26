@@ -5,6 +5,7 @@ from app.ai.tools import business_tools
 from sqlalchemy.engine import make_url
 from psycopg_pool import ConnectionPool
 from langgraph.checkpoint.postgres import PostgresSaver
+from app.ai.untrusted_data import sanitize_tool_results
 from app.core.config import settings
 import logging
 
@@ -156,6 +157,7 @@ agent = create_agent(
     tools=business_tools,
     system_prompt=SYSTEM_PROMPT,
     checkpointer=checkpointer,
+    middleware=[sanitize_tool_results],
 )
 
 

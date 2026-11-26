@@ -261,7 +261,10 @@ def test_login_sets_secure_refresh_cookie(client, db_session, mock_verification_
 
     assert "businesspilot_refresh_token=" in cookie
     assert "httponly" in cookie
-    assert "samesite=none" in cookie
+    expected_samesite = (
+        "samesite=none" if settings.app_env == "production" else "samesite=lax"
+    )
+    assert expected_samesite in cookie
     if settings.app_env == "production":
         assert "; secure" in cookie
     else:
@@ -334,7 +337,10 @@ def test_refresh_rejects_expired_token(client, db_session, mock_verification_ema
     assert "businesspilot_refresh_token=" in cookie
     assert "max-age=0" in cookie
     assert "httponly" in cookie
-    assert "samesite=none" in cookie
+    expected_samesite = (
+        "samesite=none" if settings.app_env == "production" else "samesite=lax"
+    )
+    assert expected_samesite in cookie
     assert "path=/api/v1/auth" in cookie
 
 
@@ -365,7 +371,10 @@ def test_logout_revokes_refresh_token(client, db_session, mock_verification_emai
 
     cookie = response.headers["set-cookie"].lower()
     assert "max-age=0" in cookie
-    assert "samesite=none" in cookie
+    expected_samesite = (
+        "samesite=none" if settings.app_env == "production" else "samesite=lax"
+    )
+    assert expected_samesite in cookie
     assert "path=/api/v1/auth" in cookie
 
 
