@@ -94,7 +94,7 @@ def health_check():
 @app.get("/api/v1/health/ready")
 def readiness_check():
     database_status = "connected"
-    ollama_status = "available"
+    ai_provider = settings.chat_model_provider
 
     try:
         with engine.connect() as connection:
@@ -102,45 +102,64 @@ def readiness_check():
     except Exception:
         database_status = "disconnected"
 
-    try:
-        import urllib.request
+    if ai_provider == "gemini":
+        ai_status = (
+            "configured"
+            if settings.gemini_api_key
+            else "not_configured"
+        )
+        ai_ready = ai_status == "configured"
 
-        url = f"{settings.ollama_base_url.rstrip('/')}/api/tags"
+    else:
+        ai_status = "available"
 
-        with urllib.request.urlopen(url, timeout=5) as response:
-            if response.status != 200:
-                ollama_status = "unavailable"
-            else:
-                import json
+        try:
+            import json
+            import urllib.request
 
-                ollama_data = json.loads(response.read().decode())
+            url = (
+                f"{settings.ollama_base_url.rstrip('/')}/api/tags"
+            )
 
-                available_models = [
-                    model["name"]
-                    for model in ollama_data.get("models", [])
-                ]
+            with urllib.request.urlopen(url, timeout=5) as response:
+                if response.status != 200:
+                    ai_status = "unavailable"
+                else:
+                    ollama_data = json.loads(
+                        response.read().decode()
+                    )
 
-                if settings.ollama_model not in available_models:
-                    ollama_status = "model_not_found"
+                    available_models = [
+                        model["name"]
+                        for model in ollama_data.get("models", [])
+                    ]
 
-    except Exception:
-        ollama_status = "unavailable"
+                    if settings.ollama_model not in available_models:
+                        ai_status = "model_not_found"
 
-    if database_status != "connected" or ollama_status != "available":
+        except Exception:
+            ai_status = "unavailable"
+
+        ai_ready = ai_status == "available"
+
+    if database_status != "connected" or not ai_ready:
         raise HTTPException(
             status_code=503,
             detail={
                 "status": "not_ready",
                 "database": database_status,
-                "ollama": ollama_status,
+                "ai_provider": ai_provider,
+                "ai_status": ai_status,
             },
         )
 
     return {
         "status": "ready",
         "database": database_status,
-        "ollama": ollama_status,
+        "ai_provider": ai_provider,
+        "ai_status": ai_status,
     }
+
 
 app.include_router(customers.router, prefix="/api/v1")
 app.include_router(products.router, prefix="/api/v1")
