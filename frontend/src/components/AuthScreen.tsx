@@ -297,28 +297,7 @@ export default function AuthScreen() {
                 />
               </label>
 
-              {!isRegistering && !needsAccountLink && (
-                <div style={{ textAlign: "right", marginTop: "-8px" }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowForgotPassword(true);
-                      setError("");
-                    }}
-                    className="auth-password-toggle"
-                    style={{
-                      position: "static",
-                      width: "auto",
-                      height: "auto",
-                      color: "var(--primary)",
-                      fontSize: "13px",
-                      fontWeight: 600,
-                    }}
-                  >
-                    Forgot password?
-                  </button>
-                </div>
-              )}
+
 
               {error && (
                 <div className="auth-error" role="alert">
@@ -528,6 +507,29 @@ export default function AuthScreen() {
               </small>
             )}
           </label>
+
+          {!isRegistering && !needsAccountLink && (
+            <div style={{ textAlign: "right", marginTop: "-8px" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForgotPassword(true);
+                  setError("");
+                }}
+                className="auth-password-toggle"
+                style={{
+                  position: "static",
+                  width: "auto",
+                  height: "auto",
+                  color: "var(--primary)",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                }}
+              >
+                Forgot password?
+              </button>
+            </div>
+          )}
 
           {error && (
             <div className="auth-error" role="alert">
