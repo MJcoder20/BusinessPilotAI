@@ -143,6 +143,7 @@ connection_pool = ConnectionPool(
         "autocommit": True,
         "prepare_threshold": 0,
     },
+    check=ConnectionPool.check_connection,
     open=False,
 )
 
