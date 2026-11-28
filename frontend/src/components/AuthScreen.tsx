@@ -34,7 +34,14 @@ function getApiError(error: unknown): string {
 }
 
 export default function AuthScreen() {
-  const { login, register, linkAccount } = useAuth();
+  const {
+    login,
+    register,
+    linkAccount,
+    isPasswordRecovery,
+    requestPasswordReset,
+    updatePassword,
+  } = useAuth();
 
   const [isRegistering, setIsRegistering] = useState(false);
   const [confirmationSent, setConfirmationSent] = useState(false);
@@ -46,6 +53,10 @@ export default function AuthScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetPassword, setResetPassword] = useState("");
+  const [confirmResetPassword, setConfirmResetPassword] = useState("");
+  const [resetEmailSent, setResetEmailSent] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -96,11 +107,265 @@ export default function AuthScreen() {
     }
   }
 
+  async function handleForgotPassword(
+    event: FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      await requestPasswordReset(email);
+      setResetEmailSent(true);
+    } catch (err: unknown) {
+      setError(getApiError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handlePasswordReset(
+    event: FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+    setError("");
+
+    if (resetPassword.length < 12) {
+      setError("Your password must contain at least 12 characters.");
+      return;
+    }
+
+    if (resetPassword !== confirmResetPassword) {
+      setError("The passwords do not match.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      await updatePassword(resetPassword);
+    } catch (err: unknown) {
+      setError(getApiError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function switchMode() {
     setIsRegistering((previous) => !previous);
     setConfirmationSent(false);
     setError("");
     setPassword("");
+  }
+
+  if (isPasswordRecovery) {
+    return (
+      <main className="auth-screen">
+        <section className="auth-card">
+          <div className="auth-brand">
+            <div className="auth-brand-icon">
+              <Bot size={27} />
+            </div>
+            <div>
+              <h1>BusinessPilot</h1>
+              <span>AI BUSINESS ASSISTANT</span>
+            </div>
+          </div>
+
+          <div className="auth-heading">
+            <div className="auth-heading-icon">
+              <LockKeyhole size={21} />
+            </div>
+            <h2>Reset your password</h2>
+            <p>Choose a new password for your account.</p>
+          </div>
+
+          <form
+            className="auth-form"
+            onSubmit={handlePasswordReset}
+          >
+            <label>
+              New password
+              <input
+                type="password"
+                value={resetPassword}
+                onChange={(event) =>
+                  setResetPassword(event.target.value)
+                }
+                placeholder="Enter your new password"
+                minLength={12}
+                maxLength={128}
+                autoComplete="new-password"
+                required
+                disabled={loading}
+              />
+              <small>Use at least 12 characters.</small>
+            </label>
+
+            <label>
+              Confirm new password
+              <input
+                type="password"
+                value={confirmResetPassword}
+                onChange={(event) =>
+                  setConfirmResetPassword(event.target.value)
+                }
+                placeholder="Confirm your new password"
+                minLength={12}
+                maxLength={128}
+                autoComplete="new-password"
+                required
+                disabled={loading}
+              />
+            </label>
+
+            {error && (
+              <div className="auth-error" role="alert">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="auth-submit-button"
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <LoaderCircle size={18} className="spinner" />
+                  Updating password...
+                </>
+              ) : (
+                "Update password"
+              )}
+            </button>
+          </form>
+
+          <p className="auth-security-note">
+            Your new password will securely replace your previous password.
+          </p>
+        </section>
+      </main>
+    );
+  }
+
+  if (showForgotPassword) {
+    return (
+      <main className="auth-screen">
+        <section className="auth-card">
+          <div className="auth-brand">
+            <div className="auth-brand-icon">
+              <Bot size={27} />
+            </div>
+            <div>
+              <h1>BusinessPilot</h1>
+              <span>AI BUSINESS ASSISTANT</span>
+            </div>
+          </div>
+
+          <div className="auth-heading">
+            <div className="auth-heading-icon">
+              <MailCheck size={25} />
+            </div>
+
+            <h2>
+              {resetEmailSent ? "Check your email" : "Forgot password?"}
+            </h2>
+
+            <p>
+              {resetEmailSent
+                ? "If an account exists for this address, you'll receive a password-reset link."
+                : "Enter your account email address and we'll send you a password-reset link."}
+            </p>
+          </div>
+
+          {!resetEmailSent ? (
+            <form
+              className="auth-form"
+              onSubmit={handleForgotPassword}
+            >
+              <label>
+                Email address
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  required
+                  disabled={loading}
+                />
+              </label>
+
+              {!isRegistering && !needsAccountLink && (
+                <div style={{ textAlign: "right", marginTop: "-8px" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowForgotPassword(true);
+                      setError("");
+                    }}
+                    className="auth-password-toggle"
+                    style={{
+                      position: "static",
+                      width: "auto",
+                      height: "auto",
+                      color: "var(--primary)",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+              )}
+
+              {error && (
+                <div className="auth-error" role="alert">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="auth-submit-button"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <LoaderCircle size={18} className="spinner" />
+                    Sending...
+                  </>
+                ) : (
+                  "Send reset link"
+                )}
+              </button>
+            </form>
+          ) : (
+            <p className="auth-security-note">
+              Check your inbox and spam folder. Open the newest recovery email
+              in a private browser window if another account is already signed in.
+            </p>
+          )}
+
+          <div className="auth-switch">
+            Remember your password?
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowForgotPassword(false);
+                setResetEmailSent(false);
+                setError("");
+              }}
+              disabled={loading}
+            >
+              Return to sign in
+            </button>
+          </div>
+        </section>
+      </main>
+    );
   }
 
   if (confirmationSent) {

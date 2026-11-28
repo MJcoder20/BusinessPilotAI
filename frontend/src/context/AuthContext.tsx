@@ -4,11 +4,11 @@ import {
   useContext,
   useEffect,
   useState,
+  useRef,
   type ReactNode,
 } from "react";
 
 import {
-  login as loginApi,
   register as registerApi,
   logout as logoutApi,
   getCurrentUser,
@@ -34,6 +34,9 @@ interface AuthContextType {
     password: string
   ) => Promise<void>;
   logout: () => Promise<void>;
+  isPasswordRecovery: boolean;
+  requestPasswordReset: (email: string) => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(
@@ -47,9 +50,26 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+  const recoveryDetected = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") {
+        recoveryDetected.current = true;
+        setIsPasswordRecovery(true);
+
+        setAuthProvider("supabase");
+
+        if (session) {
+          setAccessToken(session.access_token);
+        }
+      }
+    });
 
     const handleSessionExpired = () => {
       setAccessToken(null);
@@ -74,6 +94,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (session) {
           setAuthProvider("supabase");
           setAccessToken(session.access_token);
+
+          if (recoveryDetected.current) {
+            if (!cancelled) {
+              setIsPasswordRecovery(true);
+              setUser(null);
+            }
+            return;
+          }
 
           const currentUser = await syncSupabaseUser(
             session.access_token
@@ -105,6 +133,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     return () => {
       cancelled = true;
+      subscription.unsubscribe();
       window.removeEventListener(
         "auth:session-expired",
         handleSessionExpired
@@ -150,12 +179,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       // Existing legacy accounts continue using FastAPI authentication.
-      try {
-        const response = await loginApi(email, password);
-        setUser(response.user);
-      } catch (legacyError) {
-        // Preserve the legacy error for existing legacy users.
-        throw legacyError;
+      if (supabaseError) {
+        console.error("Supabase login failed:", {
+          message: supabaseError.message,
+          code: supabaseError.code,
+          status: supabaseError.status,
+        });
+
+        throw new Error(
+          `Supabase login failed: ${supabaseError.message}`
+        );
       }
     },
     []
@@ -196,6 +229,57 @@ export function AuthProvider({ children }: AuthProviderProps) {
     []
   );
 
+  const requestPasswordReset = useCallback(
+    async (email: string) => {
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        email.trim().toLowerCase(),
+        {
+          redirectTo: window.location.origin,
+        }
+      );
+
+      if (error) {
+        throw error;
+      }
+    },
+    []
+  );
+
+  const updatePassword = useCallback(
+    async (newPassword: string) => {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session) {
+        throw sessionError ?? new Error(
+          "Password updated, but your session could not be restored. Please log in."
+        );
+      }
+
+      setAuthProvider("supabase");
+      setAccessToken(session.access_token);
+
+      const currentUser = await syncSupabaseUser(
+        session.access_token
+      );
+
+      setUser(currentUser);
+      recoveryDetected.current = false;
+      setIsPasswordRecovery(false);
+    },
+    []
+  );
+
   const logout = useCallback(async () => {
     try {
       const {
@@ -221,10 +305,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
         user,
         isLoading,
         isAuthenticated: user !== null,
+        isPasswordRecovery,
         login,
         linkAccount,
         register,
         logout,
+        requestPasswordReset,
+        updatePassword,
       }}
     >
       {children}

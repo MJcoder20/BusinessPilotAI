@@ -117,7 +117,13 @@ function App() {
   );
 
   const messages = activeConversation?.messages ?? [];
-  const { user, isLoading: authLoading, isAuthenticated, logout } = useAuth();
+  const {
+    user,
+    isLoading: authLoading,
+    isAuthenticated,
+    isPasswordRecovery,
+    logout,
+  } = useAuth();
 
 
 
@@ -513,7 +519,7 @@ function App() {
     );
   }
 
-  if (!isAuthenticated) {
+  if (isPasswordRecovery || !isAuthenticated) {
     return <AuthScreen />;
   }
 
